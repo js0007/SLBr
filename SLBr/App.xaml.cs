@@ -4203,19 +4203,22 @@ Inner Exception: {7}";
         private static void SetEdgeFlags(WebViewSettings Settings)
         {
             //edge-webview-foreground-boost-opt-in
-            // Does this actually work? Disabling msSmartScreenProtection in --disable-features does seem to work
+            //Does this actually work? Disabling msSmartScreenProtection in --disable-features does seem to work
             //msLocalSpellcheck,msFreezeAdFramesImmediately,msEdgeAdaptiveCPUThrottling
             //msEdgeWebViewApplyWebResourceRequestedFilterForOOPIFs
 
             //WARNING: Do not include msWebView2CancelInitialNavigation. application/octet-stream URLs cause crashes on boot.
             string EnableFeatures = "msWebView2CodeCache,msWebView2TreatAppSuspendAsDeviceSuspend";
+            string DisableFeatures = "msSpeechRecognitionServiceUseCetoService";
             try
             {
                 Settings.AddFlag("enable-features", EnableFeatures);
+                Settings.AddFlag("disable-features", EnableFeatures);
             }
             catch
             {
                 Settings.Flags["enable-features"] += "," + EnableFeatures;
+                Settings.Flags["disable-features"] += "," + DisableFeatures;
             }
         }
 
