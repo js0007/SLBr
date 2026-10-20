@@ -113,6 +113,7 @@ namespace SLBr
                     {
                         if (wParam.ToInt32() == DllUtils.HTMAXBUTTON)
                         {
+                            handled = true;
                             MaximizeRestoreButton.Tag = null;
                             MaximizeRestoreButton_Click(null, null);
                         }

@@ -1,7 +1,6 @@
-﻿/*Copyright © SLT Softwares. All rights reserved.
+/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using SLBr.Controls;
@@ -1025,15 +1024,7 @@ namespace SLBr
                                             _ = Dispatcher.BeginInvoke(async () =>
                                             {
                                                 await Task.Delay(1000);
-                                                switch (Item.Engine)
-                                                {
-                                                    case WebEngineType.Chromium:
-                                                        await ExtensionManager.LoadCEFExtensions();
-                                                        break;
-                                                    case WebEngineType.ChromiumEdge:
-                                                        await WebViewManager.InstallWebView2Extensions();
-                                                        break;
-                                                }
+                                                await WebViewManager.InstallWebView2Extensions();
                                             });
                                         }
                                         break;
@@ -1051,15 +1042,7 @@ namespace SLBr
                                     _ = Dispatcher.BeginInvoke(async () =>
                                     {
                                         await Task.Delay(1000);
-                                        switch (Item.Engine)
-                                        {
-                                            case WebEngineType.Chromium:
-                                                await ExtensionManager.LoadCEFExtensions();
-                                                break;
-                                            case WebEngineType.ChromiumEdge:
-                                                await WebViewManager.InstallWebView2Extensions();
-                                                break;
-                                        }
+                                        await WebViewManager.InstallWebView2Extensions();
                                     });
                                 }
                             }
@@ -1076,15 +1059,7 @@ namespace SLBr
                                 _ = Dispatcher.BeginInvoke(async () =>
                                 {
                                     await Task.Delay(1000);
-                                    switch (Item.Engine)
-                                    {
-                                        case WebEngineType.Chromium:
-                                            await ExtensionManager.LoadCEFExtensions();
-                                            break;
-                                        case WebEngineType.ChromiumEdge:
-                                            await WebViewManager.InstallWebView2Extensions();
-                                            break;
-                                    }
+                                    await WebViewManager.InstallWebView2Extensions();
                                 });
                             }
                         }
@@ -1948,7 +1923,7 @@ namespace SLBr
                         foreach (Browser BrowserView in _Window.Tabs.Select(i => i.Content).Where(i => i != null))
                         {
                             ObservableCollection<Extension> Value = App.Instance.ExtensionManager.GetExtensions(BrowserView?.WebView?.Engine ?? (WebEngineType)App.Instance.GlobalSave.GetInt("WebEngine"));
-                            BrowserView.ExtensionsButton.Visibility = Value?.Count != 0 ? Visibility.Visible : Visibility.Collapsed;
+                            BrowserView.ExtensionsButton.Visibility = Value?.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                             BrowserView.ExtensionsMenu.ItemsSource = Value;
                         }
                     }
@@ -2305,7 +2280,7 @@ $Toast = [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, 
             }*/
             string Report = string.Format(ReportExceptionText,
                 ReleaseVersion,
-                Cef.CefVersion,
+                Utils.GetChromiumVersion(),
                 WebViewManager.WebView2Version,
                 Error.Message,
                 Error.Source,
@@ -2366,7 +2341,7 @@ $Toast = [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, 
 #if DEBUG
         const string ReportExceptionText = @"Automatic Report
 - Version: {0}
-- CEF: {1}
+- Chromium: {1}
 - WebView2: {2}
 - Message: {3}
 - Source: {4}
@@ -2693,7 +2668,7 @@ Inner Exception: {7}";
             if (WebViewManager.IsWebView2Initialized)
                 return WebViewManager.WebView2Version;
             //if (WebViewManager.IsCefInitialized)
-            return Cef.ChromiumVersion;
+            return Utils.GetChromiumVersion();
         }*/
 
         public void SaveOpenSearch(string Name, string Url)
@@ -3240,14 +3215,10 @@ Inner Exception: {7}";
             if (!GlobalSave.Has("SpellCheckProvider"))
                 GlobalSave.Set("SpellCheckProvider", 0);
 
-            if (!GlobalSave.Has("WebEngine"))
-            {
-                int DefaultEngine = 1;
-                string? AvailableVersion = null;
-                try { AvailableVersion = CoreWebView2Environment.GetAvailableBrowserVersionString(); }
-                catch (WebView2RuntimeNotFoundException) { DefaultEngine = 0; }
-                GlobalSave.Set("WebEngine", DefaultEngine);
-            }
+            // Migrate removed CEF and invalid values without changing existing Edge/IE profiles.
+            if (!GlobalSave.Has("WebEngine") ||
+                !Enum.IsDefined(typeof(WebEngineType), GlobalSave.GetInt("WebEngine")))
+                GlobalSave.Set("WebEngine", (int)WebEngineType.ChromiumEdge);
 
             if (!GlobalSave.Has("AntiTamper"))
                 GlobalSave.Set("AntiTamper", false);
@@ -3541,8 +3512,7 @@ Inner Exception: {7}";
             Settings.RegisterProtocol("gopher", WebViewManager.GopherHandler);
             Settings.RegisterProtocol("slbr", WebViewManager.SLBrHandler);
 
-            Settings.CefRuntimeStyle = GlobalSave.GetInt("ChromiumRuntimeStyle", 0) == 1 ? CefRuntimeStyle.Alloy : CefRuntimeStyle.Chrome;
-            switch (GlobalSave.GetInt("TridentVersion", 4))
+                        switch (GlobalSave.GetInt("TridentVersion", 4))
             {
                 case 0: Settings.TridentVersion = TridentEmulationVersion.IE7; break;
                 case 1: Settings.TridentVersion = TridentEmulationVersion.IE8; break;
@@ -3628,8 +3598,8 @@ Inner Exception: {7}";
 
             switch ((WebEngineType)GlobalSave.GetInt("WebEngine"))
             {
-                case WebEngineType.Chromium:
-                    WebViewManager.InitializeCEF();
+                default:
+                    WebViewManager.InitializeWebView2();
                     break;
                 case WebEngineType.ChromiumEdge:
                     WebViewManager.InitializeWebView2();
@@ -4039,8 +4009,6 @@ Inner Exception: {7}";
             Settings.AddFlag("enable-usermedia-screen-capturing");
 
             //Settings.AddFlag("disable-rtc-smoothness-algorithm");
-            if (Settings.CefRuntimeStyle == CefRuntimeStyle.Alloy)
-                Settings.AddFlag("auto-select-desktop-capture-source", "Entire screen");
 
             //Settings.AddFlag("turn-off-streaming-media-caching-always");
             //Settings.AddFlag("turn-off-streaming-media-caching-on-battery");
@@ -4240,9 +4208,7 @@ Inner Exception: {7}";
         public async Task ClearAllData()
         {
             History.Clear();
-            Cef.GetGlobalCookieManager().DeleteCookies(string.Empty, string.Empty);
-            await Cef.GetGlobalRequestContext().ClearHttpAuthCredentialsAsync();
-            foreach (MainWindow _Window in AllWindows)
+                                    foreach (MainWindow _Window in AllWindows)
             {
                 foreach (Browser BrowserView in _Window.Tabs.Select(i => i.Content))
                 {
@@ -4468,8 +4434,7 @@ Inner Exception: {7}";
             }
             MiniHttpClient.Dispose();
             AppInitialized = false;
-            WebViewManager.ShutdownCEF();
-            WebViewManager.ShutdownWebView2();
+                        WebViewManager.ShutdownWebView2();
             Shutdown();
         }
 
@@ -4668,7 +4633,7 @@ Inner Exception: {7}";
         {
             UserAgent = UserAgentGenerator.BuildUserAgentFromProduct($"SLBr/{ReleaseVersion} {UserAgentGenerator.BuildChromeBrand()}", Toggle ? PlatformID.Unix : null);
             MobileView = Toggle;
-            int ChromiumMajor = int.Parse(Cef.ChromiumVersion.Split('.')[0]);
+            int ChromiumMajor = int.Parse(Utils.GetChromiumVersion().Split('.')[0]);
             FirefoxUserAgent = $"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:{ChromiumMajor}.0) Gecko/20100101 Firefox/{ChromiumMajor}.0";
             List<WebUserAgentBrand> Brands = UserAgentGenerator.ShuffleBrandList([
                     UserAgentGenerator.GetGreasedUserAgentBrandVersion(ChromiumMajor),
@@ -4690,7 +4655,7 @@ Inner Exception: {7}";
                 Model = string.Empty,
                 Platform = Toggle ? "Android" : "Windows",
                 PlatformVersion = Toggle ? "10" : UserAgentGenerator.GetPlatformVersion(),//https://textslashplain.com/2021/09/21/determining-os-platform-version/
-                FullVersion = Cef.ChromiumVersion,
+                FullVersion = Utils.GetChromiumVersion(),
                 Mobile = Toggle
             };
             UserAgentBrandsString = string.Join(", ", Brands.Select(b => $"\"{b.Brand}\";v=\"{b.Version}\""));
@@ -5143,86 +5108,6 @@ Inner Exception: {7}";
     
         public const string ArticleScript = "(function(){var metaTags=document.getElementsByTagName('meta');for(var i=0;i<metaTags.length;i++){if (metaTags[i].getAttribute('property')==='og:type'&&metaTags[i].getAttribute('content')==='article'){return true;}if (metaTags[i].getAttribute('name')==='article:author'){return true;}}return false;})();";
         
-        public const string CefAudioScript = @"(function() {
-  if (window.__cef_audio__) return;
-  window.__cef_audio__ = true;
-  let lastState = null;
-  let checkScheduled = false;
-  let __slbr_audio_observer__ = null;
-  let checksWithoutMedia = 0;
-  function checkElements() {
-    let playing = false;
-    let foundMedia = false;
-    const mediaEls = document.querySelectorAll('audio,video');
-    if (mediaEls.length > 0) {
-      foundMedia = true;
-      for (let i = 0; i < mediaEls.length; i++) {
-        const el = mediaEls[i];
-        if (!el.paused && !el.muted && el.volume > 0 && el.readyState > 2) {
-          playing = true;
-          break;
-        }
-      }
-    }
-    if (!playing && window.__cef_audio_ctxs__) {
-      if (window.__cef_audio_ctxs__.length > 0) foundMedia = true;
-      for (let i = 0; i < window.__cef_audio_ctxs__.length; i++) {
-        if (window.__cef_audio_ctxs__[i].state === 'running') {
-          playing = true;
-          break;
-        }
-      }
-    }
-    if (playing !== lastState) {
-      lastState = playing;
-      engine.postMessage({ type: '__cef_audio__', play: playing ? 1 : 0 });
-    }
-    if (!foundMedia) {
-      checksWithoutMedia++;
-      if (checksWithoutMedia > 20 && __slbr_audio_observer__) {
-        __slbr_audio_observer__.disconnect();
-        __slbr_audio_observer__ = null;
-        console.log(""Cef audio monitor: MutationObserver auto-disabled (no media found)."");
-      }
-    }
-    else checksWithoutMedia = 0;
-  }
-  function scheduleCheck() {
-    if (!checkScheduled) {
-      checkScheduled = true;
-      requestAnimationFrame(() => {
-        checkScheduled = false;
-        checkElements();
-      });
-    }
-  }
-  (function () {
-    const Orig = window.AudioContext || window.webkitAudioContext;
-    if (!Orig) return;
-    window.__cef_audio_ctxs__ = [];
-    function WrappedAudioContext() {
-      const ctx = new Orig();
-      window.__cef_audio_ctxs__.push(ctx);
-      const oldClose = ctx.close.bind(ctx);
-      ctx.close = function () {
-        const i = window.__cef_audio_ctxs__.indexOf(ctx);
-        if (i > -1) window.__cef_audio_ctxs__.splice(i, 1);
-        return oldClose();
-      };
-      return ctx;
-    }
-    WrappedAudioContext.prototype = Orig.prototype;
-    window.AudioContext = WrappedAudioContext;
-  })();
-  ['play', 'playing', 'pause', 'volumechange', 'ended'].forEach(function (ev) {
-    document.addEventListener(ev, scheduleCheck, true);
-  });
-  if (document.body) {
-    __slbr_audio_observer__ = new MutationObserver(scheduleCheck);
-    __slbr_audio_observer__.observe(document.body, { childList: true, subtree: true });
-  }
-  checkElements();
-})();";
         /*public const string TridentAudioScript = @"(function(){
   if (window.__trident_audio__) return;
   window.__trident_audio__ = true;

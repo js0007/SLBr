@@ -1016,7 +1016,7 @@
                                     </StackPanel>
                                 </GroupBox>
                                 <Button Padding="10,20" Margin="0,0,0,10" Style="{StaticResource NavigationButton}" controls:ControlExtensions.Icon="&#xe8a7;" Background="{StaticResource SecondaryBrush}" Click="HyperlinkButton_Click" Tag="http://chromewebstore.google.com" VerticalAlignment="Center" Content="Chrome Web Store"/>
-                                <Button Padding="10,20" Margin="0,0,0,10" Style="{StaticResource NavigationButton}" controls:ControlExtensions.Icon="&#xe8a7;" Background="{StaticResource SecondaryBrush}" Click="HyperlinkButton_Click" Tag="chrome://extensions" VerticalAlignment="Center" Content="Chromium Extensions"/>
+                                <Button Padding="10,20" Margin="0,0,0,10" Style="{StaticResource NavigationButton}" controls:ControlExtensions.Icon="&#xe8a7;" Background="{StaticResource SecondaryBrush}" Click="HyperlinkButton_Click" Tag="chrome://extensions" VerticalAlignment="Center" Content="Extensions"/>
                                 <GroupBox Margin="0,0,0,10">
                                     <StackPanel>
                                         <DockPanel LastChildFill="False">
@@ -1161,8 +1161,7 @@
                                         <DockPanel Margin="0,0,0,10">
                                             <TextBlock VerticalAlignment="Center" Text="Web Engine"/>
                                             <ComboBox x:Name="WebEngineComboBox" Width="200px" VerticalAlignment="Center" SelectedIndex="0" DockPanel.Dock="Right" HorizontalAlignment="Right" SelectionChanged="WebEngineComboBox_SelectionChanged">
-                                                <ComboBoxItem>Chromium (CEF)</ComboBoxItem>
-                                                <ComboBoxItem>Edge (WebView2)</ComboBoxItem>
+                                                                                                <ComboBoxItem>Edge (WebView2)</ComboBoxItem>
                                                 <!--<ComboBoxItem>Edge Legacy (EdgeHTML)</ComboBoxItem>-->
                                                 <!--<ComboBoxItem>Firefox (Gecko)</ComboBoxItem>-->
                                                 <!--<ComboBoxItem>Servo</ComboBoxItem>-->
@@ -1170,14 +1169,7 @@
                                             </ComboBox>
                                         </DockPanel>
                                         <!--<CheckBox x:Name="PDFViewerExtensionCheckBox" Click="PDFViewerExtensionCheckBox_Click" Content="Open PDF instead of downloading (Enable PDF Viewer Extension)" Width="Auto" Margin="0,0,0,10"/>-->
-                                        <DockPanel Margin="0,0,0,10">
-                                            <TextBlock VerticalAlignment="Center" Text="CEF Runtime Style"/>
-                                            <ComboBox x:Name="RuntimeStyleComboBox" Width="200px" VerticalAlignment="Center" SelectedIndex="0" DockPanel.Dock="Right" HorizontalAlignment="Right" SelectionChanged="RuntimeStyleComboBox_SelectionChanged">
-                                                <ComboBoxItem>Chrome</ComboBoxItem>
-                                                <ComboBoxItem>Alloy</ComboBoxItem>
-                                            </ComboBox>
-                                        </DockPanel>
-                                        <DockPanel Margin="0,0,0,10">
+                                                                               <DockPanel Margin="0,0,0,10">
                                             <TextBlock VerticalAlignment="Center" Text="Trident Version"/>
                                             <ComboBox x:Name="TridentVersionComboBox" Width="200px" VerticalAlignment="Center" SelectedIndex="0" DockPanel.Dock="Right" HorizontalAlignment="Right" SelectionChanged="TridentVersionComboBox_SelectionChanged">
                                                 <ComboBoxItem>7</ComboBoxItem>
@@ -1279,14 +1271,14 @@
                                 </TextBlock>
                                 <TextBlock Margin="0,0,0,0">
                         Made possible by
-                        <Hyperlink NavigateUri="https://github.com/cefsharp/CefSharp" RequestNavigate="Hyperlink_RequestNavigate">CefSharp</Hyperlink>
+                        WebView2
                         and other
                         <Hyperlink NavigateUri="slbr://credits" RequestNavigate="Hyperlink_RequestNavigate">open-source software</Hyperlink>.
                                 </TextBlock>
                                 <TextBlock Margin="0,0,0,10">
                         If you find SLBr useful, consider starring the
                         <Hyperlink NavigateUri="https://github.com/SLT-World/SLBr" RequestNavigate="Hyperlink_RequestNavigate">SLBr GitHub repository</Hyperlink> and supporting
-                        <Hyperlink NavigateUri="https://github.com/sponsors/amaitland" RequestNavigate="Hyperlink_RequestNavigate">CefSharp</Hyperlink>.
+                        open-source community.
                                 </TextBlock>
                                 <GroupBox Margin="0,0,0,10">
                                     <StackPanel>
@@ -1300,8 +1292,8 @@
                                         </Button>
                                         <DockPanel LastChildFill="False">
                                             <Button Style="{DynamicResource HyperlinkButton}" Margin="0,0,5,0" Click="HyperlinkButton_Click" Tag="https://github.com/SLT-World/SLBr" Width="Auto" HorizontalAlignment="Center">SLBr</Button>
-                                            <Button Style="{DynamicResource HyperlinkButton}" Margin="0,0,5,0" Click="HyperlinkButton_Click" Tag="https://github.com/cefsharp/CefSharp" Width="Auto" HorizontalAlignment="Center">CefSharp</Button>
-                                            <Button Style="{DynamicResource HyperlinkButton}" Margin="0,0,5,0" Click="HyperlinkButton_Click" Tag="https://github.com/chromiumembedded/cef" Width="Auto" HorizontalAlignment="Center">Chromium Embedded Framework</Button>
+                                            
+                                            
                                         </DockPanel>
                                     </StackPanel>
                                 </GroupBox>
@@ -1311,9 +1303,7 @@
                                         Versions
                                     </GroupBox.Header>
                                     <StackPanel>
-                                        <TextBlock x:Name="ChromiumVersion" Margin="0,0,0,10" VerticalAlignment="Top" Text="Chromium:"/>
-                                        <TextBlock x:Name="CEFVersion" Margin="0,0,0,10" VerticalAlignment="Top" Text="CEF:"/>
-                                        <TextBlock x:Name="WebView2Version" Margin="0,0,0,10" VerticalAlignment="Top" Text="WebView2:"/>
+                                                                                                                        <TextBlock x:Name="WebView2Version" Margin="0,0,0,10" VerticalAlignment="Top" Text="WebView2:"/>
                                         <TextBlock x:Name="TridentVersion" VerticalAlignment="Top" Text="Trident (Internet Explorer):"/>
                                         <!--<TextBlock x:Name="ChromiumWebkit" Margin="0,0,0,10" VerticalAlignment="Top" Text="Webkit:"/>
                             <TextBlock x:Name="ChromiumJSVersion" VerticalAlignment="Top" Text="Javascript:"/>-->

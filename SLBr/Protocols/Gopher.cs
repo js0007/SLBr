@@ -1,7 +1,7 @@
-﻿/*Copyright © SLT Softwares. All rights reserved.
+/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
+
 using SLBr.WebView;
 using System.IO;
 using System.Net;
@@ -141,7 +141,7 @@ function gopherSearch(e,r,t){let c=prompt(""Search query:"");if(!c)return;let h=
             //var Response = "application/gopher-menu";
             var ExtensionFull = Utils.GetFileExtension(URI.AbsolutePath);
             string Extension = (ExtensionFull.Length > 0) ? ExtensionFull[1..] : string.Empty;
-            return Cef.GetMimeType(Extension);
+            return Utils.GetMimeType(Extension);
         }
 
 

@@ -1,9 +1,6 @@
-﻿/*Copyright © SLT Softwares. All rights reserved.
+/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
-using CefSharp.Internals;
-using CefSharp.Wpf.HwndHost;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using SLBr.Controls;
@@ -30,480 +27,63 @@ namespace SLBr.WebView
         public static CoreWebView2ControllerOptions WebView2PrivateControllerOptions { get; set; }
         public static CoreWebView2FindOptions WebView2FindOptions { get; set; }
 
-        public static ChromiumLifeSpanHandler GlobalLifeSpanHandler { get; set; }
-        public static ChromiumJsDialogHandler GlobalJsDialogHandler { get; set; }
-        public static ChromiumKeyboardHandler GlobalKeyboardHandler { get; set; }
-        public static ChromiumPermissionHandler GlobalPermissionHandler { get; set; }
-        public static ChromiumDownloadHandler GlobalDownloadHandler { get; set; }
-        public static ChromiumContextMenuHandler GlobalContextMenuHandler { get; set; }
-        public static ChromiumFindHandler GlobalFindHandler { get; set; }
-        public static ChromiumDialogHandler GlobalDialogHandler { get; set; }
-
+                                                                
         public static List<IWebView> WebViews = [];
-        public static Dictionary<IWebBrowser, ChromiumWebView> ChromiumWebViews = [];
-
+        
         public static WebViewSettings Settings { get; set; }
         public static WebViewRuntimeSettings RuntimeSettings { get; } = new();
 
         public static WebDownloadManager DownloadManager { get; } = new();
 
         public static bool IsWebView2Initialized { get; private set; } = false;
-        public static bool IsCefInitialized { get; private set; } = false;
-        public static bool IsTridentInitialized { get; private set; } = false;
+                public static bool IsTridentInitialized { get; private set; } = false;
 
         public static string WebView2Version { get; private set; } = "";
 
         public static async Task<IWebView> Create(WebEngineType EngineType, List<WebNavigationEntry> Urls, WebViewBrowserSettings _BrowserSettings)
+
         {
+
             switch (EngineType)
+
             {
-                case WebEngineType.Chromium:
-                    {
-                        ChromiumWebView CView = new(Urls, _BrowserSettings);
-                        await CView.InitializeAsync();
-                        return CView;
-                    }
+
                 case WebEngineType.ChromiumEdge:
+
                     if (!IsWebView2Initialized)
+
                     {
+
                         try { WebView2Version = CoreWebView2Environment.GetAvailableBrowserVersionString(); }
-                        catch (WebView2RuntimeNotFoundException)
-                        {
-                            ChromiumWebView CBView = new(Urls, _BrowserSettings);
-                            await CBView.InitializeAsync();
-                            return CBView;
-                        }
+
+                        catch (WebView2RuntimeNotFoundException) { }
+
                     }
+
                     ChromiumEdgeWebView EView = new(Urls, _BrowserSettings);
+
                     await EView.InitializeAsync();
+
                     return EView;
+
                 case WebEngineType.Trident:
+
                     return new TridentWebView(Urls, _BrowserSettings);
+
                 default:
-                    {
-                        ChromiumWebView CView = new(Urls, _BrowserSettings);
-                        await CView.InitializeAsync();
-                        return CView;
-                    }
+
+                    ChromiumEdgeWebView DefView = new(Urls, _BrowserSettings);
+
+                    await DefView.InitializeAsync();
+
+                    return DefView;
+
             }
+
         }
 
-        private static Task<bool>? CEFInitializeTask;
-        private static readonly Lock CEFInitializeLock = new();
 
-        public static Task<bool> InitializeCEF()
-        {
-            lock (CEFInitializeLock)
-            {
-                if (CEFInitializeTask != null)
-                    return CEFInitializeTask;
 
-                CEFInitializeTask = InitializeCEFInternal();
-                return CEFInitializeTask;
-            }
-        }
-
-        private static async Task<bool> InitializeCEFInternal()
-        {
-            if (IsCefInitialized)
-                return true;
-            if (string.IsNullOrEmpty(SECRETS.GOOGLE_API_KEY))
-            {
-                InfoBar GoogleAPIKeyInfoBar = null;
-                GoogleAPIKeyInfoBar = new()
-                {
-                    Title = "Missing API Keys",
-                    Description = [new() { Text = "Google API keys are missing. Some functionality of Chromium (CEF) will be disabled." }],
-                    Actions = [
-                        new() { Text = "Learn more", Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent), Foreground = App.Instance.CornflowerBlueColor, Command = new RelayCommand(() => {
-                            App.Instance.CloseInfoBar(GoogleAPIKeyInfoBar);
-                            App.Instance.CurrentFocusedWindow().NewTab("https://www.chromium.org/developers/how-tos/api-keys/", true, -1, bool.Parse(App.Instance.GlobalSave.Get("PrivateTabs")));
-                        }) },
-                    ]
-                };
-                App.Instance.InfoBars.Add(GoogleAPIKeyInfoBar);
-            }
-            CefSettings ChromiumSettings = new()
-            {
-                BrowserSubprocessPath = Process.GetCurrentProcess().MainModule.FileName,
-                PersistSessionCookies = false,
-                LogFile = Settings.LogFile,
-                LogSeverity = LogSeverity.Error,
-                Locale = Settings.Language,
-                AcceptLanguageList = string.Join(",", Settings.Languages),
-                JavascriptFlags = Settings.JavaScriptFlags,
-                BackgroundColor = 0x000000
-            };
-
-            if (Settings.UserDataPath != null)
-            {
-                ChromiumSettings.CachePath = Path.GetFullPath(Path.Combine(Settings.UserDataPath, "Cache"));
-                ChromiumSettings.RootCachePath = Settings.UserDataPath;
-                CEFExtensionsPath = Path.Combine(Settings.UserDataPath, "Default", "Extensions");
-            }
-
-            if (Settings.ExtensionsPath != null)
-            {
-                CEFUnpackedExtensionsPath = Path.Combine(Settings.ExtensionsPath, "CEF");
-                if (!Directory.Exists(CEFUnpackedExtensionsPath))
-                    Directory.CreateDirectory(CEFUnpackedExtensionsPath);
-            }
-
-            ChromiumSettings.CefCommandLineArgs.Remove("disable-back-forward-cache");
-            //NOTE: Resolved in https://github.com/cefsharp/CefSharp/pull/5245
-            //ChromiumSettings.AddNoErrorFlag("disable-features", "EnableHangWatcher,GlicActorUi,AutofillActorMode,LensOverlay");
-            foreach (var Flag in Settings.Flags)
-                ChromiumSettings.AddNoErrorFlag(Flag.Key, Flag.Value);
-
-            CefSharpSettings.RuntimeStyle = Settings.CefRuntimeStyle;
-            foreach (var Scheme in Settings.Schemes)
-            {
-                ChromiumSettings.RegisterScheme(new CefCustomScheme
-                {
-                    SchemeName = Scheme.Key,
-                    SchemeHandlerFactory = new ChromiumProtocolHandlerFactory(Scheme.Value),
-                    IsStandard = true,
-                    IsSecure = true,
-                    IsDisplayIsolated = true
-                });
-            }
-            //await Task.Delay(20000);
-            //TODO: Ineffective, application freezes.
-            bool Success = await Cef.InitializeAsync(ChromiumSettings, false);
-
-            if (!Success)
-                return false;
-
-            await Cef.UIThreadTaskFactory.StartNew(async delegate
-            {
-                IRequestContext GlobalRequestContext = Cef.GetGlobalRequestContext();
-                //GlobalRequestContext.SetPreference("extensions.ui.developer_mode", true, out _);
-                GlobalRequestContext.SetPreference("plugins.always_open_pdf_externally", !RuntimeSettings.PDFViewer, out _);
-                GlobalRequestContext.SetPreference("download.open_pdf_in_system_reader", !RuntimeSettings.PDFViewer, out _);
-
-                //GlobalRequestContext.SetPreference("browser.theme.color_scheme", 0, out _);
-                //GlobalRequestContext.SetPreference("compact_mode", true, out _);
-                GlobalRequestContext.SetPreference("history.saving_disabled", true, out _);
-                GlobalRequestContext.SetPreference("profile.content_settings.enable_cpss.geolocation", false, out _);
-                //GlobalRequestContext.SetPreference("accessibility.captions.live_caption_enabled", false, out _);
-
-                GlobalRequestContext.SetPreference("autofill.enabled", false, out _);
-                GlobalRequestContext.SetPreference("autofill.profile_enabled", false, out _);
-                GlobalRequestContext.SetPreference("autofill.credit_card_enabled", false, out _);
-
-                /*void BuildPreferencesString(StringBuilder Builder, string ParentPath, string CurrentKey, object Value)
-                {
-                    string FullPath = string.IsNullOrEmpty(ParentPath) ? CurrentKey : $"{ParentPath}.{CurrentKey}";
-                    if (Value is System.Dynamic.ExpandoObject Expando)
-                    {
-                        foreach (KeyValuePair<string, object> Property in (IDictionary<string, object>)Expando)
-                            BuildPreferencesString(Builder, FullPath, Property.Key, Property.Value);
-                    }
-                    else if (Value is System.Collections.IEnumerable List && Value is not string)
-                    {
-                        int Index = 0;
-                        foreach (object Item in List)
-                        {
-                            BuildPreferencesString(Builder, FullPath, $"[{Index}]", Item);
-                            Index++;
-                        }
-                    }
-                    else
-                        Builder.AppendLine($"{FullPath}: {Value}");
-                }
-
-                //TODO: Investigate the absence of "net.happy_eyeballs_v3_enabled" https://source.chromium.org/chromium/chromium/src/+/main:chrome/common/pref_names.h;l=3033?q=HappyEyeballsV3
-
-                IDictionary<string, object> Preferences = GlobalRequestContext.GetAllPreferences(true);
-                StringBuilder Builder = new();
-
-                foreach (KeyValuePair<string, object> Pair in Preferences)
-                    BuildPreferencesString(Builder, string.Empty, Pair.Key, Pair.Value);
-                File.WriteAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "WriteLines.txt"), Builder.ToString());*/
-
-                //File.WriteAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "WriteLines.txt"), System.Text.Json.JsonSerializer.Serialize(GlobalRequestContext.GetAllPreferences(true), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8);
-
-                GlobalRequestContext.SetPreference("download_bubble.partial_view_enabled", false, out _);
-
-                GlobalRequestContext.SetPreference("shopping_list_enabled", false, out _);
-                GlobalRequestContext.SetPreference("browser_labs_enabled", false, out _);
-                GlobalRequestContext.SetPreference("allow_dinosaur_easter_egg", false, out _);
-                GlobalRequestContext.SetPreference("feedback_allowed", false, out _);
-                GlobalRequestContext.SetPreference("policy.feedback_surveys_enabled", false, out _);
-                GlobalRequestContext.SetPreference("policy.built_in_ai_apis_enabled", false, out _);
-
-                GlobalRequestContext.SetPreference("ntp.promo_visible", false, out _);
-                GlobalRequestContext.SetPreference("ntp.shortcust_visible", false, out _);
-                GlobalRequestContext.SetPreference("ntp_snippets.enable", false, out _);
-                GlobalRequestContext.SetPreference("ntp_snippets_by_dse.enable", false, out _);
-                GlobalRequestContext.SetPreference("search.suggest_enabled", false, out _);
-                GlobalRequestContext.SetPreference("side_search.enabled", false, out _);
-                GlobalRequestContext.SetPreference("translate.enabled", false, out _);
-                GlobalRequestContext.SetPreference("alternate_error_pages.enabled", false, out _);
-                GlobalRequestContext.SetPreference("https_first_balanced_mode_enabled", false, out _);
-                GlobalRequestContext.SetPreference("https_first_mode_incognito_enabled", false, out _);
-                GlobalRequestContext.SetPreference("https_only_mode_auto_enabled", false, out _);
-                GlobalRequestContext.SetPreference("https_only_mode_enabled", false, out _);
-                GlobalRequestContext.SetPreference("net.network_prediction_options", Settings.Performance == PerformancePreset.High ? 0 : 2, out _);
-                GlobalRequestContext.SetPreference("safebrowsing.enabled", false, out _);
-
-                //GlobalRequestContext.SetPreference("profile.password_manager_enabled", false, out _);
-                //GlobalRequestContext.SetPreference("credentials_enable_service", false, out _);
-
-                GlobalRequestContext.SetPreference("browser.enable_spellchecking", RuntimeSettings.SpellCheck, out _);
-                //GlobalRequestContext.SetPreference("spellcheck.use_spelling_service", false, out _);
-                if (Settings.Languages?.Length != 0)
-                {
-                    GlobalRequestContext.SetPreference("spellcheck.dictionaries", string.Join(',', Settings.Languages), out _);
-                    GlobalRequestContext.SetPreference("intl.accept_languages", string.Join(',', Settings.Languages), out _);
-                }
-                /*foreach (ContentSettingTypes SettingType in Enum.GetValues<ContentSettingTypes>())
-                {
-                    switch (SettingType)
-                    {
-                        case ContentSettingTypes.AutoSelectCertificate:
-                        case ContentSettingTypes.DeprecatedPpapiBroker:
-                        case ContentSettingTypes.SslCertDecisions:
-                        case ContentSettingTypes.AppBanner:
-                        case ContentSettingTypes.SiteEngagement:
-                        case ContentSettingTypes.UsbChooserData:
-                        case ContentSettingTypes.ImportantSiteInfo:
-                        case ContentSettingTypes.PermissionAutoblockerData:
-                        case ContentSettingTypes.AdsData:
-                        case ContentSettingTypes.Midi:
-                        case ContentSettingTypes.PasswordProtection:
-                        case ContentSettingTypes.MediaEngagement:
-                        case ContentSettingTypes.ClientHints:
-                        case ContentSettingTypes.DeprecatedAccessibilityEvents:
-                        case ContentSettingTypes.BackgroundFetch:
-                        case ContentSettingTypes.IntentPickerDisplay:
-                        case ContentSettingTypes.SerialChooserData:
-                        case ContentSettingTypes.PeriodicBackgroundSync:
-                        case ContentSettingTypes.HidChooserData:
-                        case ContentSettingTypes.WakeLockScreen:
-                        case ContentSettingTypes.WakeLockSystem:
-                        case ContentSettingTypes.BluetoothChooserData:
-                        case ContentSettingTypes.ClipboardSanitizedWrite:
-                        case ContentSettingTypes.SafeBrowsingUrlCheckData:
-                        case ContentSettingTypes.PermissionAutorevocationData:
-                        case ContentSettingTypes.FileSystemLastPickedDirectory:
-                        case ContentSettingTypes.DisplayCapture:
-                        case ContentSettingTypes.FileSystemAccessChooserData:
-                        case ContentSettingTypes.FederatedIdentitySharing:
-                        case ContentSettingTypes.HttpAllowed:
-                        case ContentSettingTypes.FormfillMetadata:
-                        case ContentSettingTypes.DeprecatedFederatedIdentityActiveSession:
-                        case ContentSettingTypes.AutoDarkWebContent:
-                        case ContentSettingTypes.RequestDesktopSite:
-                        case ContentSettingTypes.NotificationInteractions:
-                        case ContentSettingTypes.ReducedAcceptLanguage:
-                        case ContentSettingTypes.NotificationPermissionReview://
-                        case ContentSettingTypes.PrivateNetworkChooserData://Works for some reason
-                        case ContentSettingTypes.FederatedIdentityIdentityProviderSigninStatus:
-                        case ContentSettingTypes.RevokedUnusedSitePermissions:
-                        case ContentSettingTypes.FederatedIdentityIdentityProviderRegistration:
-                        case ContentSettingTypes.HttpsEnforced:
-                        case ContentSettingTypes.AllScreenCapture://
-                        case ContentSettingTypes.CookieControlsMetadata://
-                        case ContentSettingTypes.TpcdHeuristicsGrants://
-                        case ContentSettingTypes.TpcdMetadataGrants://
-                        case ContentSettingTypes.TpcdTrial://
-                        case ContentSettingTypes.TopLevelTpcdTrial://
-                        case ContentSettingTypes.TopLevelTpcdOriginTrial://
-                        case ContentSettingTypes.SmartCardGuard:
-                        case ContentSettingTypes.SmartCardData://
-                        case ContentSettingTypes.WebPrinting:
-                        case ContentSettingTypes.AutomaticFullscreen://
-                        case ContentSettingTypes.SubAppInstallationPrompts://
-                        case ContentSettingTypes.SpeakerSelection://
-                        case ContentSettingTypes.RevokedAbusiveNotificationPermissions:
-                        case ContentSettingTypes.TrackingProtection://
-                        case ContentSettingTypes.DisplayMediaSystemAudio://
-                        case ContentSettingTypes.StorageAccessHeaderOriginTrial://
-                            continue;
-                    }
-                    ContentSettingValues Value = GlobalRequestContext.GetContentSetting("https://example.com", "https://example.com", SettingType);
-                    Debug.WriteLine($"Setting: {SettingType}, Value: {Value}");
-                }*/
-                //enable_a_ping
-                /*ContentSettingValues SettingValue = GlobalRequestContext.GetContentSetting("https://example.com", "https://example.com", ContentSettingTypes.JavaScript);
-                if (SettingValue == ContentSettingValues.Allow)
-                    Debug.WriteLine("JavaScript is allowed.");
-                ICookieManager CookieManager = Cef.GetGlobalCookieManager();
-                List<CefSharp.Cookie> CookiesList = await CookieManager.VisitAllCookiesAsync();
-                foreach (var Cookie in CookiesList)
-                    Debug.WriteLine($"Name: {Cookie.Name}, Value: {Cookie.Value}");*/
-            });
-
-            GlobalLifeSpanHandler = new ChromiumLifeSpanHandler();
-            GlobalJsDialogHandler = new ChromiumJsDialogHandler();
-            GlobalKeyboardHandler = new ChromiumKeyboardHandler();
-            GlobalPermissionHandler = new ChromiumPermissionHandler();
-            GlobalDownloadHandler = new ChromiumDownloadHandler();
-            GlobalContextMenuHandler = new ChromiumContextMenuHandler();
-            GlobalFindHandler = new ChromiumFindHandler();
-            GlobalDialogHandler = new ChromiumDialogHandler();
-            IsCefInitialized = true;
-            await App.Instance.ExtensionManager.LoadCEFExtensions();
-            _ = Task.Run(async () =>
-            {
-                HashSet<IntPtr> KnownWindows = [];
-                HashSet<uint> ProcessIDs = Process.GetProcessesByName("SLBr").Select(i => (uint)i.Id).ToHashSet();
-                int ProcessIDRefreshCounter = 0;
-                int Interval = 1000;
-
-                StringBuilder ClassBuilder = new(256);
-                StringBuilder TitleBuilder = new(256);
-
-                while (true)
-                {
-                    if (++ProcessIDRefreshCounter >= 10)
-                    {
-                        ProcessIDs = Process.GetProcessesByName("SLBr").Select(i => (uint)i.Id).ToHashSet();
-                        ProcessIDRefreshCounter = 0;
-
-                        KnownWindows.RemoveWhere(i => !DllUtils.IsWindow(i));
-                    }
-
-                    DllUtils.EnumWindows((HWND, lParam) =>
-                    {
-                        if (KnownWindows.Contains(HWND))
-                            return true;
-
-                        if (!DllUtils.IsWindowVisible(HWND))
-                            return true;
-
-                        DllUtils.GetWindowThreadProcessId(HWND, out uint WindowPID);
-                        if (!ProcessIDs.Contains(WindowPID))
-                            return true;
-
-                        ClassBuilder.Clear();
-                        DllUtils.GetClassName(HWND, ClassBuilder, ClassBuilder.Capacity);
-
-                        if (ClassBuilder.ToString() != "Chrome_WidgetWin_1")
-                        {
-                            KnownWindows.Add(HWND);
-                            return true;
-                        }
-
-                        int ExStyle = DllUtils.GetWindowLong(HWND, DllUtils.GWL_EXSTYLE);
-
-                        //NOTE: Prevents undesired closure of Chromium Task Manager.
-                        if ((ExStyle & DllUtils.WS_EX_DLGMODALFRAME) == DllUtils.WS_EX_DLGMODALFRAME)
-                        {
-                            KnownWindows.Add(HWND);
-                            return true;
-                        }
-
-                        int Style = DllUtils.GetWindowLong(HWND, DllUtils.GWL_STYLE);
-                        bool HasTitleBar = (Style & DllUtils.WS_CAPTION) == DllUtils.WS_CAPTION;
-                        bool HasSystemMenu = (Style & DllUtils.WS_SYSMENU) == DllUtils.WS_SYSMENU;
-                        bool IsResizable = (Style & DllUtils.WS_THICKFRAME) == DllUtils.WS_THICKFRAME;
-
-                        if (HasTitleBar && HasSystemMenu && IsResizable && DllUtils.GetWindow(HWND, DllUtils.GW_OWNER) == IntPtr.Zero)
-                        {
-                            TitleBuilder.Clear();
-                            DllUtils.GetWindowText(HWND, TitleBuilder, TitleBuilder.Capacity);
-                            string Title = TitleBuilder.ToString();
-
-                            /*List<string> MatchingStyles = GetMatchingStyles(Style, typeof(WindowStyles));
-                            List<string> MatchingExStyles = GetMatchingStyles(ExStyle, typeof(WindowExStyles));
-
-                            Debug.WriteLine($"[Window] HWND: {HWND} | Title: {Title}");
-                            Debug.WriteLine($"[Styles] {string.Join(", ", MatchingStyles)}");
-                            Debug.WriteLine($"[Ex Styles] {string.Join(", ", MatchingExStyles)}");
-                            */
-
-                            if (Title.EndsWith(" - Chromium"))
-                            {
-                                DllUtils.PostMessage(HWND, DllUtils.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
-                                return true;
-                            }
-                        }
-                        KnownWindows.Add(HWND);
-                        return true;
-                    }, 0);
-                    await Task.Delay(Interval);
-                }
-            });
-            return true;
-        }
-        public static void ShutdownCEF()
-        {
-            Cef.Shutdown();
-        }
-        /*private static List<string> GetMatchingStyles(int CurrentStyle, Type ConstantsType)
-        {
-            List<string> Flags = [];
-            FieldInfo[] Fields = ConstantsType.GetFields(BindingFlags.Public | BindingFlags.Static);
-
-            foreach (FieldInfo Field in Fields)
-            {
-                if (Field.FieldType == typeof(uint) || Field.FieldType == typeof(int))
-                {
-                    long FieldValue = Convert.ToInt64(Field.GetValue(null));
-                    if (FieldValue != 0 && (CurrentStyle & FieldValue) == FieldValue)
-                        Flags.Add(Field.Name);
-                }
-            }
-            return Flags;
-        }
-
-        public static class WindowStyles
-        {
-            public const uint WS_OVERLAPPED = 0x00000000;
-            public const uint WS_POPUP = 0x80000000;
-            public const uint WS_CHILD = 0x40000000;
-            public const uint WS_MINIMIZE = 0x20000000;
-            public const uint WS_VISIBLE = 0x10000000;
-            public const uint WS_DISABLED = 0x08000000;
-            public const uint WS_CLIPSIBLINGS = 0x04000000;
-            public const uint WS_CLIPCHILDREN = 0x02000000;
-            public const uint WS_MAXIMIZE = 0x01000000;
-            public const uint WS_CAPTION = 0x00C00000;
-            public const uint WS_BORDER = 0x00800000;
-            public const uint WS_DLGFRAME = 0x00400000;
-            public const uint WS_VSCROLL = 0x00200000;
-            public const uint WS_HSCROLL = 0x00100000;
-            public const uint WS_SYSMENU = 0x00080000;
-            public const uint WS_THICKFRAME = 0x00040000;
-            public const uint WS_GROUP = 0x00020000;
-            public const uint WS_TABSTOP = 0x00010000;
-            public const uint WS_MINIMIZEBOX = 0x00020000;
-            public const uint WS_MAXIMIZEBOX = 0x00010000;
-        }
-
-        public static class WindowExStyles
-        {
-            public const uint WS_EX_DLGMODALFRAME = 0x00000001;
-            public const uint WS_EX_NOPARENTNOTIFY = 0x00000004;
-            public const uint WS_EX_TOPMOST = 0x00000008;
-            public const uint WS_EX_ACCEPTFILES = 0x00000010;
-            public const uint WS_EX_TRANSPARENT = 0x00000020;
-            public const uint WS_EX_MDICHILD = 0x00000040;
-            public const uint WS_EX_TOOLWINDOW = 0x00000080;
-            public const uint WS_EX_WINDOWEDGE = 0x00000100;
-            public const uint WS_EX_CLIENTEDGE = 0x00000200;
-            public const uint WS_EX_CONTEXTHELP = 0x00000400;
-            public const uint WS_EX_RIGHT = 0x00001000;
-            public const uint WS_EX_LEFT = 0x00000000;
-            public const uint WS_EX_RTLREADING = 0x00002000;
-            public const uint WS_EX_LTRREADING = 0x00000000;
-            public const uint WS_EX_LEFTSCROLLBAR = 0x00004000;
-            public const uint WS_EX_RIGHTSCROLLBAR = 0x00000000;
-            public const uint WS_EX_CONTROLPARENT = 0x00010000;
-            public const uint WS_EX_STATICEDGE = 0x00020000;
-            public const uint WS_EX_APPWINDOW = 0x00040000;
-            public const uint WS_EX_LAYERED = 0x00080000;
-            public const uint WS_EX_NOINHERITLAYOUT = 0x00100000;
-            public const uint WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
-            public const uint WS_EX_LAYOUTRTL = 0x00400000;
-            public const uint WS_EX_COMPOSITED = 0x02000000;
-            public const uint WS_EX_NOACTIVATE = 0x08000000;
-        }*/
-
-        public static string? CEFExtensionsPath;
-        public static string? CEFUnpackedExtensionsPath;
         public static string? WebView2ExtensionsPath;
         public static string? WebView2UnpackedExtensionsPath;
 
@@ -779,7 +359,7 @@ namespace SLBr.WebView
                     }
                     string FilePath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Resources", FileName);
                     if (File.Exists(FilePath))
-                        return ProtocolResponse.FromBytes(File.ReadAllBytes(FilePath), Cef.GetMimeType(Path.GetExtension(FilePath)), 200);
+                        return ProtocolResponse.FromBytes(File.ReadAllBytes(FilePath), Utils.GetMimeType(Path.GetExtension(FilePath)), 200);
                     else if (App.CustomPageOverlays.TryGetValue(Host, out _))
                         return ProtocolResponse.FromString(string.Format(App.OverlayPagePlaceholder, Host.ToTitleCase()), "text/html", 200);
                 }
@@ -805,7 +385,7 @@ namespace SLBr.WebView
             return null;
         }
 
-        public static bool RegisterOverrideRequest(string Url, byte[] Data, string MimeType = ResourceHandler.DefaultMimeType/*, bool limitedUse = false*/, int Uses = 1, int Error = -1)
+        public static bool RegisterOverrideRequest(string Url, byte[] Data, string MimeType = "text/html"/*, bool limitedUse = false*/, int Uses = 1, int Error = -1)
         {
             if (Uri.TryCreate(Url, UriKind.Absolute, out Uri? URI))
             {
@@ -856,8 +436,7 @@ namespace SLBr.WebView
 
         public PerformancePreset Performance = PerformancePreset.Default;
         public TridentEmulationVersion TridentVersion = TridentEmulationVersion.IE11;
-        public CefRuntimeStyle CefRuntimeStyle = CefRuntimeStyle.Default;
-
+        
         public string JavaScriptFlags = string.Empty;
         public Dictionary<string, string> Flags = [];
         //https://www.chromium.org/developers/how-tos/run-chromium-with-flags/
@@ -892,26 +471,46 @@ namespace SLBr.WebView
         //TODO: WebView2 Profile.DefaultDownloadFolderPath = DownloadFolderPath;
         public string DownloadFolderPath = string.Empty;
         public bool DownloadPrompt = true;
-        private bool _PDFViewer = true;
-        public bool PDFViewer
+        public bool PDFViewer { get; set; } = true;
+
+    }
+
+
+
+    public class RelayCommand : ICommand
+    {
+        private readonly Action<object> CommandHandler;
+        private readonly Func<object, bool> CanExecuteHandler;
+
+        public event EventHandler CanExecuteChanged;
+
+        public RelayCommand(Action<object> _CommandHandler, Func<object, bool> _CanExecuteHandler = null)
         {
-            get => _PDFViewer;
-            set
-            {
-                _PDFViewer = value;
-                if (WebViewManager.IsCefInitialized)
-                {
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("plugins.always_open_pdf_externally", !value, out string _);
-                        GlobalRequestContext.SetPreference("download.open_pdf_in_system_reader", !value, out string _);
-                    });
-                }
-            }
+            CommandHandler = _CommandHandler;
+            CanExecuteHandler = _CanExecuteHandler;
+        }
+        public RelayCommand(Action _CommandHandler, Func<bool> _CanExecuteHandler = null) : this(_ => _CommandHandler(), _CanExecuteHandler == null ? null : new Func<object, bool>(_ => _CanExecuteHandler()))
+        {
+        }
+
+        public void Execute(object parameter)
+        {
+            CommandHandler(parameter);
+        }
+
+        public bool CanExecute(object parameter)
+        {
+            return CanExecuteHandler == null || CanExecuteHandler(parameter);
+        }
+
+        public void RaiseCanExecuteChanged()
+        {
+            if (CanExecuteChanged != null)
+                CanExecuteChanged(this, EventArgs.Empty);
         }
     }
 
+    
     public class WebDownloadManager
     {
         public event Action<WebDownloadItem> DownloadStarted;
@@ -1188,731 +787,5 @@ namespace SLBr.WebView
         }
     }
 
-    public class RelayCommand : ICommand
-    {
-        private readonly Action<object> CommandHandler;
-        private readonly Func<object, bool> CanExecuteHandler;
-
-        public event EventHandler CanExecuteChanged;
-
-        public RelayCommand(Action<object> _CommandHandler, Func<object, bool> _CanExecuteHandler = null)
-        {
-            CommandHandler = _CommandHandler;
-            CanExecuteHandler = _CanExecuteHandler;
-        }
-        public RelayCommand(Action _CommandHandler, Func<bool> _CanExecuteHandler = null) : this(_ => _CommandHandler(), _CanExecuteHandler == null ? null : new Func<object, bool>(_ => _CanExecuteHandler()))
-        {
-        }
-
-        public void Execute(object parameter)
-        {
-            CommandHandler(parameter);
-        }
-
-        public bool CanExecute(object parameter)
-        {
-            return CanExecuteHandler == null || CanExecuteHandler(parameter);
-        }
-
-        public void RaiseCanExecuteChanged()
-        {
-            if (CanExecuteChanged != null)
-                CanExecuteChanged(this, EventArgs.Empty);
-        }
-    }
-
-    public class ChromiumLifeSpanHandler : ILifeSpanHandler
-    {
-        public bool OnBeforePopup(IWebBrowser browserControl, IBrowser browser, IFrame frame, string targetUrl, string targetFrameName,
-            WindowOpenDisposition targetDisposition, bool userGesture, IPopupFeatures popupFeatures, IWindowInfo windowInfo,
-            IBrowserSettings browserSettings, ref bool noJavascriptAccess, out IWebBrowser newBrowser)
-        {
-            newBrowser = null;
-            if (targetDisposition == WindowOpenDisposition.NewPictureInPicture)
-                return false;
-            else
-            {
-                if (targetDisposition == WindowOpenDisposition.CurrentTab)
-                    browser.MainFrame.LoadUrl(targetUrl);
-                else
-                {
-                    NewTabRequestEventArgs Args = new(targetUrl, targetDisposition == WindowOpenDisposition.NewBackgroundTab, targetDisposition == WindowOpenDisposition.NewPopup ? new Rect(popupFeatures.X ?? 0, popupFeatures.Y ?? 0, popupFeatures.Width ?? 0, popupFeatures.Height ?? 0) : null);
-                    WebViewManager.ChromiumWebViews[browserControl]?.NotifyNewTabRequested(Args);
-
-                    //CefSharp doesn't seem to support the ability to set something like "var myWindow = window.open("", "MsgWindow", "width=200,height=100");"
-                    /*if (Args.WebView is ChromiumWebView ChromiumWebView)
-                        newBrowser = (ChromiumWebBrowser)ChromiumWebView.Control;
-                    else
-                        newBrowser = null;*/
-                }
-            }
-            return true;
-        }
-
-        public void OnAfterCreated(IWebBrowser browserControl, IBrowser browser)
-        {
-        }
-
-        public bool DoClose(IWebBrowser browserControl, IBrowser browser)
-        {
-            if (browser.IsPopup)
-                return false;
-            return true;
-        }
-
-        public void OnBeforeClose(IWebBrowser browserControl, IBrowser browser)
-        {
-        }
-    }
-    public class ChromiumJsDialogHandler : IJsDialogHandler
-    {
-        public bool OnBeforeUnloadDialog(IWebBrowser chromiumWebBrowser, IBrowser browser, string messageText, bool isReload, IJsDialogCallback callback)
-        {
-            string Address = string.Empty;
-            Application.Current?.Dispatcher.Invoke(() => Address = chromiumWebBrowser.Address);
-            ScriptDialogEventArgs Args = new(ScriptDialogType.BeforeUnload, Address, messageText, string.Empty, isReload);
-            WebViewManager.ChromiumWebViews[chromiumWebBrowser]?.RaiseScriptDialog(Args);
-            if (Args.Handled)
-            {
-                callback.Continue(Args.Result);
-                return true;
-            }
-            callback.Continue(true);
-            return true;
-        }
-
-        public void OnDialogClosed(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
-
-        public bool OnJSDialog(IWebBrowser chromiumWebBrowser, IBrowser browser, string originUrl, CefJsDialogType DialogType, string messageText, string defaultPromptText, IJsDialogCallback callback, ref bool suppressMessage)
-        {
-            ScriptDialogEventArgs Args = new((ScriptDialogType)DialogType, originUrl, messageText, defaultPromptText);
-            WebViewManager.ChromiumWebViews[chromiumWebBrowser]?.RaiseScriptDialog(Args);
-            if (Args.Handled)
-            {
-                if (DialogType == CefJsDialogType.Prompt)
-                    callback.Continue(Args.Result, Args.PromptResult);
-                else
-                    callback.Continue(Args.Result);
-                return true;
-            }
-
-            suppressMessage = true;
-            return false;
-        }
-
-        public void OnResetDialogState(IWebBrowser chromiumWebBrowser, IBrowser browser)
-        {
-            Application.Current?.Dispatcher.Invoke(() =>
-            {
-                foreach (Window Window in Application.Current.Windows)
-                {
-                    if (Window is InformationDialogWindow || Window is DynamicDialogWindow || Window is CredentialsDialogWindow)
-                        Window.Close();
-                }
-            });
-        }
-    }
-    public class ChromiumKeyboardHandler : IKeyboardHandler
-    {
-        public bool OnKeyEvent(IWebBrowser chromiumWebBrowser, IBrowser browser, KeyType type, int windowsKeyCode, int nativeKeyCode, CefEventFlags modifiers, bool isSystemKey) => true;
-        public bool OnPreKeyEvent(IWebBrowser chromiumWebBrowser, IBrowser browser, KeyType type, int windowsKeyCode, int nativeKeyCode, CefEventFlags modifiers, bool isSystemKey, ref bool isKeyboardShortcut)
-        {
-            if (type == KeyType.RawKeyDown)
-            {
-                bool HasControl = modifiers == CefEventFlags.ControlDown;
-                bool HasShift = modifiers == CefEventFlags.ShiftDown;
-                bool HasAlt = modifiers == CefEventFlags.AltDown;
-                int WPFKeyCode = (int)KeyInterop.KeyFromVirtualKey(windowsKeyCode);
-                HotKey? Key = HotKeyManager.HotKeys.FirstOrDefault(i => i.KeyCode == WPFKeyCode && i.Control == HasControl && i.Shift == HasShift && i.Alt == HasAlt);
-                if (Key != null)
-                    Application.Current?.Dispatcher.BeginInvoke(() => Key.Callback());
-            }
-            return false;
-        }
-    }
-
-    public class ChromiumResourceRequestHandler(ChromiumWebView _WebView) : IResourceRequestHandler
-    {
-        private ChromiumWebView WebView = _WebView;
-
-        private WebResourceResponse? Response;
-        private bool Intercept;
-
-        public CefReturnValue OnBeforeResourceLoad(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IRequestCallback callback)
-        {
-            Dictionary<string, string> Headers = [with(StringComparer.OrdinalIgnoreCase)];
-            foreach (string? Key in request.Headers.AllKeys)
-                Headers[Key] = request.Headers[Key];
-            ResourceRequestEventArgs Args = new(
-                request.Url,
-                browser.FocusedFrame?.Url ?? string.Empty,
-                request.Method,
-                request.ResourceType.ToResourceRequestType(),
-                Headers
-            );
-            WebView.RaiseResourceRequest(Args);
-            if (Args.Cancel) return CefReturnValue.Cancel;
-            if (Args.ModifiedHeaders != null && Args.ModifiedHeaders.Count != 0)
-            {
-                foreach (var Header in Args.ModifiedHeaders)
-                    request.SetHeaderByName(Header.Key, Header.Value, true);
-            }
-            Intercept = Args.Intercept;
-            if (Args.Response != null)
-                Response = Args.Response;
-            return CefReturnValue.Continue;
-        }
-
-        public IResourceHandler GetResourceHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request)
-        {
-            if (Response != null)
-            {
-                if (Response.Content.CanSeek)
-                    Response.Content.Position = 0;
-                ResourceHandler ResourceOverride = ResourceHandler.FromStream(Response.Content, Response.MimeType, true);
-                if (Response.StatusCode.HasValue)
-                    ResourceOverride.StatusCode = Response.StatusCode.Value;
-                if (Response.Headers.IsValueCreated && Response.Headers.Value.Count != 0)
-                {
-                    foreach (var Header in Response.Headers.Value)
-                        ResourceOverride.Headers[Header.Key] = Header.Value;
-                }
-                return ResourceOverride;
-            }
-            return null;
-        }
-        public ICookieAccessFilter GetCookieAccessFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) => null;
-        public void OnResourceRedirect(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response, ref string newUrl) { }
-        public bool OnResourceResponse(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response)
-        {
-            //WebView.RaiseResourceResponded(new ResourceRespondedResult(request.Url, request.ResourceType.ToResourceRequestType()));
-            return false;
-        }
-        public IResponseFilter GetResourceResponseFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response)
-        {
-            if (Intercept)
-            {
-                string Url = request.Url;
-                ResourceRequestType Type = request.ResourceType.ToResourceRequestType();
-                int Code = response.StatusCode;
-                return new CefResponseInterceptorFilter((Bytes, Length) =>
-                {
-                    Task.Run(async () =>
-                    {
-                        MemoryStream _Stream = new(Bytes, 0, Length, false);
-                        ResponseInterceptedResult InterceptedResult = new(Url, Type, Code, async (Action) => {
-                            using (_Stream)
-                            {
-                                await Action(_Stream);
-                            }
-                        });
-                        WebView.RaiseResponseIntercepted(InterceptedResult);
-                    });
-                });
-            }
-            return null;
-        }
-        public void OnResourceLoadComplete(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response, UrlRequestStatus status, long receivedContentLength)
-        {
-            WebView.RaiseResourceLoaded(new ResourceLoadedResult(request.Url, status != UrlRequestStatus.Failed && status != UrlRequestStatus.Canceled, receivedContentLength, request.ResourceType.ToResourceRequestType()));
-        }
-        public bool OnProtocolExecution(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request)
-        {
-            ExternalProtocolEventArgs Args = new(request.Url, frame.Url);
-            WebView.RaiseExternalProtocolRequested(Args);
-            if (Args.Launch)
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = request.Url,
-                    UseShellExecute = true
-                });
-            }
-            return true;
-        }
-        public void Dispose()
-        {
-            GC.SuppressFinalize(this);
-        }
-    }
-
-    public class CefResponseInterceptorFilter : IResponseFilter
-    {
-        private readonly MemoryStream ShadowBuffer = new(32768);
-        private readonly Action<byte[], int> OnComplete;
-
-        public CefResponseInterceptorFilter(Action<byte[], int> _OnComplete)
-        {
-            OnComplete = _OnComplete;
-        }
-
-        public bool InitFilter() => true;
-
-        public FilterStatus Filter(Stream? dataIn, out long dataInRead, Stream? dataOut, out long dataOutWritten)
-        {
-            dataInRead = 0;
-            dataOutWritten = 0;
-            if (dataIn == null || dataOut == null)
-            {
-                CompleteAndExtractBytes();
-                return FilterStatus.Done;
-            }
-            int Length = (int)dataIn.Length;
-            if (Length == 0)
-            {
-                CompleteAndExtractBytes();
-                return FilterStatus.Done;
-            }
-            byte[] Buffer = ArrayPool<byte>.Shared.Rent(Length);
-            try
-            {
-                dataInRead = dataIn.Read(Buffer, 0, Length);
-                if (dataInRead > 0)
-                {
-                    dataOut.Write(Buffer, 0, (int)dataInRead);
-                    dataOutWritten = dataInRead;
-                    ShadowBuffer.Write(Buffer, 0, (int)dataInRead);
-                }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(Buffer);
-            }
-            if (dataIn.Position >= Length)
-            {
-                CompleteAndExtractBytes();
-                return FilterStatus.Done;
-            }
-            return FilterStatus.NeedMoreData;
-        }
-
-        private void CompleteAndExtractBytes()
-        {
-            int Length = (int)ShadowBuffer.Length;
-            if (Length > 0)
-            {
-                OnComplete(ShadowBuffer.GetBuffer(), Length);
-                ShadowBuffer.SetLength(0);
-            }
-        }
-
-        public void Dispose() => ShadowBuffer.Dispose();
-    }
-
-    public class ChromiumPermissionHandler : IPermissionHandler
-    {
-        public void OnDismissPermissionPrompt(IWebBrowser chromiumWebBrowser, IBrowser browser, ulong promptId, PermissionRequestResult result) { }
-
-        public bool OnRequestMediaAccessPermission(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, string requestingOrigin, MediaAccessPermissionType requestedPermissions, IMediaAccessCallback callback)
-        {
-            if (callback == null)
-                return false;
-            Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (chromiumWebBrowser.IsDisposed || !browser.IsValid)
-                {
-                    callback.Dispose();
-                    return;
-                }
-
-                PermissionRequestedEventArgs Args = new(requestingOrigin, requestedPermissions.ToWebPermission());
-                WebViewManager.ChromiumWebViews[chromiumWebBrowser]?.RaisePermissionRequested(Args);
-                if (chromiumWebBrowser.IsDisposed || !browser.IsValid)
-                {
-                    callback.Dispose();
-                    return;
-                }
-                if (Args.State == WebPermissionState.Allow)
-                    callback.Continue(requestedPermissions);
-                else if (Args.State == WebPermissionState.Deny)
-                    callback.Cancel();
-                callback.Dispose();
-            }));
-            return true;
-        }
-
-        //CefSharp's PermissionRequestType enum isn't synced with CEF's
-        //https://github.com/chromiumembedded/cef/blob/master/include/internal/cef_types.h
-        //https://github.com/cefsharp/CefSharp/blob/master/CefSharp/Enums/PermissionRequestType.cs
-        public enum FixedPermissionRequestType : uint
-        {
-            None = 0,
-            ArSession = 1 << 0,
-            CameraPanTiltZoom = 1 << 1,
-            CameraStream = 1 << 2,
-            CapturedSurfaceControl = 1 << 3,
-            Clipboard = 1 << 4,
-            TopLevelStorageAccess = 1 << 5,
-            DiskQuota = 1 << 6,
-            LocalFonts = 1 << 7,
-            Geolocation = 1 << 8,
-            HandTracking = 1 << 9,
-            IdentityProvider = 1 << 10,
-            IdleDetection = 1 << 11,
-            MicStream = 1 << 12,
-            MidiSysex = 1 << 13,
-            MultipleDownloads = 1 << 14,
-            Notifications = 1 << 15,
-            KeyboardLock = 1 << 16,
-            PointerLock = 1 << 17,
-            ProtectedMediaIdentifier = 1 << 18,
-            RegisterProtocolHandler = 1 << 19,
-            StorageAccess = 1 << 20,
-            VrSession = 1 << 21,
-            WebAppInstallation = 1 << 22,
-            WindowManagement = 1 << 23,
-            FileSystemAccess = 1 << 24,
-            LocalNetworkAccess = 1 << 25,
-            LocalNetwork = 1 << 26,
-            LoopbackNetwork = 1 << 27,
-            Sensors = 1 << 28,
-        }
-
-        public bool OnShowPermissionPrompt(IWebBrowser chromiumWebBrowser, IBrowser browser, ulong promptId, string requestingOrigin, PermissionRequestType requestedPermissions, IPermissionPromptCallback callback)
-        {
-            if (callback == null)
-                return false;
-            FixedPermissionRequestType _ProperPermissionRequestType = (FixedPermissionRequestType)requestedPermissions;
-            Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (chromiumWebBrowser.IsDisposed || !browser.IsValid)
-                {
-                    callback.Dispose();
-                    return;
-                }
-                PermissionRequestedEventArgs Args = new(requestingOrigin, _ProperPermissionRequestType.ToWebPermission());
-                WebViewManager.ChromiumWebViews[chromiumWebBrowser]?.RaisePermissionRequested(Args);
-                if (chromiumWebBrowser.IsDisposed || !browser.IsValid)
-                {
-                    callback.Dispose();
-                    return;
-                }
-                if (Args.State == WebPermissionState.Allow)
-                    callback.Continue(PermissionRequestResult.Accept);
-                else if (Args.State == WebPermissionState.Deny)
-                    callback.Continue(PermissionRequestResult.Deny);
-                else if (Args.State == WebPermissionState.Ask)
-                    callback.Continue(PermissionRequestResult.Ignore);
-                callback.Dispose();
-            }));
-            return true;
-        }
-    }
-    public class ChromiumDownloadHandler : IDownloadHandler
-    {
-        private Dictionary<int, WebDownloadItem> WebDownloadItems = [];
-        private Dictionary<int, IDownloadItemCallback> DownloadCallbacks = [];
-
-        public bool CanDownload(IWebBrowser chromiumWebBrowser, IBrowser browser, string url, string requestMethod) => true;
-
-        public bool OnBeforeDownload(IWebBrowser chromiumWebBrowser, IBrowser browser, DownloadItem downloadItem, IBeforeDownloadCallback callback)
-        {
-            if (callback.IsDisposed) return false;
-            using (callback)
-            {
-                string PreferredPath = Path.Combine(WebViewManager.RuntimeSettings.DownloadFolderPath, downloadItem.SuggestedFileName);
-                if (WebViewManager.RuntimeSettings.DownloadPrompt)
-                {
-                    SaveFileDialog SaveDialog = new()
-                    {
-                        FileName = downloadItem.SuggestedFileName,
-                        InitialDirectory = WebViewManager.RuntimeSettings.DownloadFolderPath,
-                        Filter = "All Files (*.*)|*.*"
-                    };
-                    if (SaveDialog.ShowDialog() == true)
-                        PreferredPath = SaveDialog.FileName;
-                    else
-                        return false;
-                }
-                string TempPath;
-                if (Path.GetExtension(PreferredPath) == ".crx")
-                    TempPath = PreferredPath;
-                else
-                    TempPath = PreferredPath + ".part";
-
-                WebDownloadItem Item = new()
-                {
-                    Engine = WebEngineType.Chromium,
-                    ID = downloadItem.Id.ToString(),
-                    Url = downloadItem.Url,
-                    FileName = Path.GetFileName(PreferredPath),
-                    FullPath = PreferredPath,
-                    TempPath = TempPath,
-                    TotalBytes = downloadItem.TotalBytes,
-                    State = WebDownloadState.InProgress,
-                    Interruptible = true
-                };
-
-                WebDownloadItems[downloadItem.Id] = Item;
-                WebViewManager.DownloadManager.Started(Item);
-                callback.Continue(TempPath, false);
-            }
-            /*using (callback)
-                callback.Continue(Path.Combine(WebViewManager.Settings.DownloadFolderPath, downloadItem.SuggestedFileName), WebViewManager.Settings.DownloadPrompt);*/
-            return true;
-        }
-
-        public void OnDownloadUpdated(IWebBrowser chromiumWebBrowser, IBrowser browser, DownloadItem downloadItem, IDownloadItemCallback callback)
-        {
-            if (!WebDownloadItems.TryGetValue(downloadItem.Id, out var Item))
-                return;
-            //Item.Url = downloadItem.Url;
-            Item.TotalBytes = downloadItem.TotalBytes;
-            Item.ReceivedBytes = downloadItem.ReceivedBytes;
-            //TODO: Null provided.
-            Item.EndTime = downloadItem.EndTime;
-
-            if (downloadItem.IsInProgress)
-            {
-                DownloadCallbacks[downloadItem.Id] = callback;
-                Item.Pause = async () =>
-                {
-                    try
-                    {
-                        DownloadCallbacks[downloadItem.Id].Pause();
-
-                        await Task.Delay(100);
-                        downloadItem.IsPaused = true;
-                        downloadItem.IsInProgress = false;
-                        downloadItem.IsInterrupted = false;
-                        OnDownloadUpdated(chromiumWebBrowser, browser, downloadItem, callback);
-                    }
-                    catch { }
-                };
-                Item.Resume = () =>
-                {
-                    try
-                    {
-                        DownloadCallbacks[downloadItem.Id].Resume();
-                    }
-                    catch { }
-                };
-                Item.Cancel = async () =>
-                {
-                    try
-                    {
-                        DownloadCallbacks[downloadItem.Id].Cancel();
-                        await Task.Delay(100);
-                        if (!downloadItem.IsCancelled)
-                        {
-                            downloadItem.IsCancelled = true;
-                            downloadItem.IsComplete = false;
-                            downloadItem.IsPaused = false;
-                            downloadItem.IsInProgress = false;
-                            downloadItem.IsInterrupted = false;
-                            OnDownloadUpdated(chromiumWebBrowser, browser, downloadItem, callback);
-                        }
-                    }
-                    catch { }
-                };
-                Item.State = WebDownloadState.InProgress;
-                WebViewManager.DownloadManager.Updated(Item);
-            }
-            //TODO: Pause() does not fire OnDownloadUpdated until another event is called.
-            else if (downloadItem.IsPaused)
-            {
-                //Debug.WriteLine("Download paused");
-                Item.State = WebDownloadState.Paused;
-                WebViewManager.DownloadManager.Updated(Item);
-            }
-            else if (downloadItem.IsInterrupted && downloadItem.InterruptReason != DownloadInterruptReason.UserCanceled)
-            {
-                Item.State = WebDownloadState.Interrupted;
-                Item.InterruptReason = downloadItem.InterruptReason.ToWebDownloadInterruptReason();
-                WebViewManager.DownloadManager.Updated(Item);
-            }
-            else
-            {
-                //WARNING: Keep this warning path otherwise the open downloads wouldn't work
-                DownloadCallbacks.Remove(downloadItem.Id);
-                if (downloadItem.IsCancelled || downloadItem.IsInterrupted && downloadItem.InterruptReason == DownloadInterruptReason.UserCanceled)
-                    Item.State = WebDownloadState.Canceled;
-                else if (downloadItem.IsComplete)
-                    Item.State = WebDownloadState.Completed;
-                WebViewManager.DownloadManager.Completed(Item);
-            }
-        }
-    }
-    public class ChromiumContextMenuHandler : IContextMenuHandler
-    {
-        public void OnBeforeContextMenu(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model)
-        {
-            //Both CefSharp & WebView2 suffer from the same spellcheck issue.
-            if (parameters.FrameUrl.StartsWith("devtools:"))
-                return;
-            model.Clear();
-            WebViewManager.ChromiumWebViews[chromiumWebBrowser]?.RaiseContextMenu(new WebContextMenuEventArgs
-            {
-                X = parameters.XCoord,
-                Y = parameters.YCoord,
-                //TODO: Investigate CefSharp copy link text
-                //LinkText = parameters.SelectionText,
-                LinkUrl = parameters.LinkUrl,
-                FrameUrl = parameters.FrameUrl,
-                SelectionText = parameters.SelectionText,
-                IsEditable = parameters.IsEditable,
-                DictionarySuggestions = parameters.DictionarySuggestions,
-                //MisspelledWord = parameters.MisspelledWord,
-                SourceUrl = parameters.SourceUrl,
-                //SpellCheck = parameters.IsSpellCheckEnabled,
-                MediaType = parameters.MediaType.ToWebContextMenuMediaType(),
-                MenuType = parameters.TypeFlags.ToWebContextMenuType()
-            });
-        }
-
-        public bool OnContextMenuCommand(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IContextMenuParams parameters, CefMenuCommand commandId, CefEventFlags eventFlags) => false;
-        public void OnContextMenuDismissed(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame) { }
-        public bool RunContextMenu(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model, IRunContextMenuCallback callback) => false;
-    }
-    public class ChromiumProtocolHandlerFactory : ISchemeHandlerFactory
-    {
-        private readonly ProtocolHandler Handler;
-
-        public ChromiumProtocolHandlerFactory(ProtocolHandler _Handler)
-        {
-            Handler = _Handler;
-        }
-
-        public IResourceHandler Create(IBrowser browser, IFrame frame, string schemeName, IRequest request)
-        {
-            ChromiumWebView _ChromiumWebView = WebViewManager.ChromiumWebViews.FirstOrDefault(i => i.Key.BrowserCore != null && i.Key.BrowserCore.IsSame(browser)).Value;
-            //WebViewManager.ChromiumWebViews.TryGetValue(browser, out ChromiumWebView _ChromiumWebView);
-            return new ChromiumResourceHandler(Handler, request.Url, _ChromiumWebView?.Settings.Private.ToInt().ToString() ?? string.Empty, _ChromiumWebView);
-        }
-    }
-    public class ChromiumResourceHandler : ResourceHandler
-    {
-        private readonly ChromiumWebView? WebView;
-        private readonly ProtocolHandler Handler;
-        private readonly string Url;
-        private readonly string Extra;
-        private CancellationTokenSource TokenSource;
-
-        public ChromiumResourceHandler(ProtocolHandler _Handler, string _Url, string _Extra, ChromiumWebView? _WebView = null)
-        {
-            WebView = _WebView;
-            Handler = _Handler;
-            Url = _Url;
-            Extra = _Extra;
-        }
-
-        public override CefReturnValue ProcessRequestAsync(IRequest request, ICallback callback)
-        {
-            TokenSource = new CancellationTokenSource();
-            _ = ExecuteRequest(callback, TokenSource.Token);
-            return CefReturnValue.ContinueAsync;
-        }
-
-        private async Task ExecuteRequest(ICallback Callback, CancellationToken Token)
-        {
-            try
-            {
-                var Response = await Handler(Url, Extra, Token).ConfigureAwait(false);
-
-                if (Token.IsCancellationRequested || Callback.IsDisposed)
-                    return;
-
-                Stream = new MemoryStream(Response.Data, false);
-                MimeType = Response.MimeType;
-                StatusCode = Response.StatusCode;
-                StatusText = "OK";
-
-                if (!Callback.IsDisposed)
-                    Callback.Continue();
-
-                if (Response.ErrorCode != WebErrorCode.None)
-                    WebView?.RaiseNavigationError(new NavigationErrorEventArgs(Response.ErrorCode, string.Empty, Url));
-            }
-            catch (OperationCanceledException) { }
-            catch (Exception Exception)
-            {
-                Stream = new MemoryStream(Encoding.UTF8.GetBytes($"<h1>Protocol error</h1><pre>{WebUtility.HtmlEncode(Exception.Message)}</pre>"), false);
-                MimeType = "text/html";
-                StatusCode = 500;
-                StatusText = "Error";
-                if (!Callback.IsDisposed)
-                    Callback.Continue();
-            }
-        }
-
-        public override void Dispose()
-        {
-            TokenSource?.Cancel();
-            TokenSource?.Dispose();
-            TokenSource = null;
-            base.Dispose();
-        }
-    }
-    public class ChromiumFindHandler : IFindHandler
-    {
-        public void OnFindResult(IWebBrowser chromiumWebBrowser, IBrowser browser, int identifier, int count, CefSharp.Structs.Rect selectionRect, int activeMatchOrdinal, bool finalUpdate)
-        {
-            WebViewManager.ChromiumWebViews[chromiumWebBrowser]?.SetFindResult(activeMatchOrdinal, count);
-        }
-    }
-    public class ChromiumDialogHandler : IDialogHandler
-    {
-        bool IDialogHandler.OnFileDialog(IWebBrowser chromiumWebBrowser, IBrowser browser, CefFileDialogMode mode, string title, string defaultFilePath, IReadOnlyCollection<string> acceptFilters, IReadOnlyCollection<string> acceptExtensions, IReadOnlyCollection<string> acceptDescriptions, IFileDialogCallback callback)
-        {
-            return OnFileDialog(chromiumWebBrowser, browser, mode, title, defaultFilePath, acceptFilters, acceptExtensions, acceptDescriptions, callback);
-        }
-        protected virtual bool OnFileDialog(IWebBrowser chromiumWebBrowser, IBrowser browser, CefFileDialogMode mode, string title, string defaultFilePath, IReadOnlyCollection<string> acceptFilters, IReadOnlyCollection<string> acceptExtensions, IReadOnlyCollection<string> acceptDescriptions, IFileDialogCallback callback)
-        {
-            if (mode == CefFileDialogMode.Open && bool.Parse(App.Instance.GlobalSave.Get("QuickImage")) && acceptFilters.FirstOrDefault() == "image/*")
-            {
-                Application.Current?.Dispatcher.Invoke(() =>
-                {
-                    ImageTray Picker = new()
-                    {
-                        FileFilters = acceptFilters,
-                        FileExtensions = acceptExtensions,
-                        FileDescriptions = acceptDescriptions
-                    };
-                    if (Picker.ShowDialog() == true && !string.IsNullOrEmpty(Picker.SelectedFilePath))
-                        callback.Continue([Picker.SelectedFilePath]);
-                    else
-                        callback.Cancel();
-                });
-                return true;
-            }
-            return false;
-        }
-    }
-    public class OverrideResourceRequestHandlerFactory : IResourceRequestHandlerFactory
-    {
-        ChromiumWebView WebView;
-        public OverrideResourceRequestHandlerFactory(ChromiumWebView _Handler)
-        {
-            WebView = _Handler;
-        }
-
-        bool IResourceRequestHandlerFactory.HasHandlers => !WebViewManager.OverrideRequests.IsEmpty;
-
-        IResourceRequestHandler IResourceRequestHandlerFactory.GetResourceRequestHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling)
-        {
-            return GetResourceRequestHandler(chromiumWebBrowser, browser, frame, request, isNavigation, isDownload, requestInitiator, ref disableDefaultHandling);
-        }
-
-        protected virtual IResourceRequestHandler GetResourceRequestHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling)
-        {
-            try
-            {
-                if (WebViewManager.OverrideRequests.TryGetValue(request.Url, out RequestOverrideItem Entry))
-                {
-                    if (Entry.Uses != -1)
-                    {
-                        Entry.Uses -= 1;
-                        if (Entry.Uses == 0)
-                            WebViewManager.OverrideRequests.TryRemove(request.Url, out Entry);
-                    }
-                    return new InMemoryResourceRequestHandler(Entry.Data, Entry.MimeType);
-                }
-                return new ChromiumResourceRequestHandler(WebView);
-            }
-            finally
-            {
-                request.Dispose();
-            }
-        }
-    }
 }
+

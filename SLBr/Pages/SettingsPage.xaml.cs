@@ -1,7 +1,6 @@
 ﻿/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using SLBr.Controls;
@@ -262,17 +261,7 @@ namespace SLBr.Pages
                 if (LanguageSelection.SelectedIndex == -1)
                     LanguageSelection.SelectedIndex = 0;
                 App.Instance.Locale = App.Instance.Languages[LanguageSelection.SelectedIndex];
-                if (WebViewManager.IsCefInitialized)
-                {
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        IRequestContext GlobalRequestContext = Cef.GetGlobalRequestContext();
-
-                        IEnumerable<string> LocaleStrings = App.Instance.Languages.Select(i => i.Tooltip);
-                        GlobalRequestContext.SetPreference("spellcheck.dictionaries", LocaleStrings, out _);
-                        GlobalRequestContext.SetPreference("intl.accept_languages", LocaleStrings, out _);
-                    });
-                }
+                // CEF removed
             }
         }
 
@@ -441,7 +430,7 @@ namespace SLBr.Pages
             ImageSearchComboBox.SelectedIndex = App.Instance.GlobalSave.GetInt("ImageSearch");
             TranslationProviderComboBox.SelectedIndex = App.Instance.GlobalSave.GetInt("TranslationProvider");
             SpellCheckProviderComboBox.SelectedIndex = App.Instance.GlobalSave.GetInt("SpellCheckProvider");
-            WebEngineComboBox.SelectedIndex = App.Instance.GlobalSave.GetInt("WebEngine");
+            WebEngineComboBox.SelectedIndex = (WebEngineType)App.Instance.GlobalSave.GetInt("WebEngine") == WebEngineType.Trident ? 1 : 0;
             TridentVersionComboBox.SelectedIndex = App.Instance.GlobalSave.GetInt("TridentVersion");
 
             TabUnloadingTimeComboBox.SelectionChanged -= TabUnloadingTimeComboBox_SelectionChanged;
@@ -459,11 +448,6 @@ namespace SLBr.Pages
             }
             TabUnloadingTimeComboBox.SelectedValue = App.Instance.GlobalSave.Get("TabUnloadingTime");
             TabUnloadingTimeComboBox.SelectionChanged += TabUnloadingTimeComboBox_SelectionChanged;
-
-            int RuntimeStyle = App.Instance.GlobalSave.GetInt("ChromiumRuntimeStyle");
-            RuntimeStyleComboBox.SelectedIndex = RuntimeStyle;
-            if (RuntimeStyle != 0)
-                ExtensionWarning.Visibility = Visibility.Visible;
 
             float Bandwidth = float.Parse(App.Instance.GlobalSave.Get("Bandwidth"));
             if (Bandwidth >= 1)
@@ -493,8 +477,7 @@ namespace SLBr.Pages
             }
 
             AboutVersion.Text = $"Version {App.Instance.ReleaseVersion}";
-            ChromiumVersion.Text = $"Chromium: {Cef.ChromiumVersion}";
-            CEFVersion.Text = $"CEF: {(Cef.CefVersion.StartsWith('r') ? Cef.CefVersion.Substring(1, Cef.CefVersion.IndexOf('-') - 10) : Cef.CefVersion.Substring(0, Cef.CefVersion.IndexOf('-') - 10))}";
+                        
             try { WebView2Version.Text = $"WebView2: {CoreWebView2Environment.GetAvailableBrowserVersionString()}"; }
             catch (WebView2RuntimeNotFoundException) { WebView2Version.Text = $"WebView2: Unavailable"; }
             switch (WebViewManager.Settings.TridentVersion)
@@ -540,77 +523,6 @@ namespace SLBr.Pages
                 FixedFontComboBox.ItemsSource = new List<string>(_Fonts);
                 MathFontComboBox.ItemsSource = new List<string>(_Fonts);
             }
-            if (WebViewManager.IsCefInitialized)
-            {
-                //TODO: APPLY FOR WEBVIEW2 & TRIDENT
-                Cef.UIThreadTaskFactory.StartNew(delegate
-                {
-                    var Preferences = Cef.GetGlobalRequestContext().GetAllPreferences(true);
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (Preferences.TryGetValue("webkit", out var WebKitObject) && WebKitObject is IDictionary<string, object> WebKit)
-                        {
-                            if (WebKit.TryGetValue("webprefs", out var WebPrefsObject) && WebPrefsObject is IDictionary<string, object> WebPrefs)
-                            {
-                                if (WebPrefs.TryGetValue("fonts", out var FontsObject) && FontsObject is IDictionary<string, object> Fonts)
-                                {
-                                    if (Fonts.TryGetValue("standard", out var StandardFontMap) && StandardFontMap is IDictionary<string, object> StandardScriptMap)
-                                    {
-                                        if (StandardScriptMap.TryGetValue("Zyyy", out var StandardFont))
-                                        {
-                                            StandardFontComboBox.SelectedItem = StandardFont;
-                                            StandardFontComboBox.IsEnabled = true;
-                                        }
-                                    }
-                                    if (Fonts.TryGetValue("serif", out var SerifFontMap) && SerifFontMap is IDictionary<string, object> SerifScriptMap)
-                                    {
-                                        if (SerifScriptMap.TryGetValue("Zyyy", out var SerifFont))
-                                        {
-                                            SerifFontComboBox.SelectedItem = SerifFont;
-                                            SerifFontComboBox.IsEnabled = true;
-                                        }
-                                    }
-                                    if (Fonts.TryGetValue("sansserif", out var SansSerifFontMap) && SansSerifFontMap is IDictionary<string, object> SansSerifScriptMap)
-                                    {
-                                        if (SansSerifScriptMap.TryGetValue("Zyyy", out var SansSerifFont))
-                                        {
-                                            SansSerifFontComboBox.SelectedItem = SansSerifFont;
-                                            SansSerifFontComboBox.IsEnabled = true;
-                                        }
-                                    }
-                                    if (Fonts.TryGetValue("fixed", out var FixedFontMap) && FixedFontMap is IDictionary<string, object> FixedScriptMap)
-                                    {
-                                        if (FixedScriptMap.TryGetValue("Zyyy", out var FixedFont))
-                                        {
-                                            FixedFontComboBox.SelectedItem = FixedFont;
-                                            FixedFontComboBox.IsEnabled = true;
-                                        }
-                                    }
-                                    if (Fonts.TryGetValue("math", out var MathFontMap) && MathFontMap is IDictionary<string, object> MathScriptMap)
-                                    {
-                                        if (MathScriptMap.TryGetValue("Zyyy", out var MathFont))
-                                        {
-                                            MathFontComboBox.SelectedItem = MathFont;
-                                            MathFontComboBox.IsEnabled = true;
-                                        }
-                                    }
-                                }
-                                if (WebPrefs.TryGetValue("default_font_size", out var FontSize))
-                                {
-                                    FontSizeSlider.Value = (int)FontSize;
-                                    FontSizeSlider.IsEnabled = true;
-                                }
-                                if (WebPrefs.TryGetValue("minimum_font_size", out var MinimumFontSize))
-                                {
-                                    MinimumFontSizeSlider.Value = (int)MinimumFontSize;
-                                    MinimumFontSizeSlider.IsEnabled = true;
-                                }
-                            }
-                        }
-                    });
-                });
-            }
-
             ExtensionsList.ItemsSource = App.Instance.ExtensionManager.GetExtensions(BrowserView?.WebView?.Engine ?? (WebEngineType)App.Instance.GlobalSave.GetInt("WebEngine"));
 
             UsernameInitial.Text = App.Instance.CurrentProfile.Initial;
@@ -632,11 +544,6 @@ namespace SLBr.Pages
             Resources["IndicatorBrushColor"] = _Theme.IndicatorColor;
         }
 
-        private void RuntimeStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (SettingsInitialized)
-                App.Instance.GlobalSave.Set("ChromiumRuntimeStyle", RuntimeStyleComboBox.SelectedIndex);
-        }
         private void ScreenshotFormatComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (SettingsInitialized)
@@ -743,7 +650,7 @@ namespace SLBr.Pages
         {
             if (SettingsInitialized)
             {
-                if (WebEngineComboBox.SelectedIndex == 1)
+                if (WebEngineComboBox.SelectedIndex == 0)
                 {
                     string? AvailableVersion = null;
                     try
@@ -752,16 +659,17 @@ namespace SLBr.Pages
                     }
                     catch (WebView2RuntimeNotFoundException)
                     {
-                        WebEngineComboBox.SelectedIndex = 0;
+                        WebEngineComboBox.SelectedIndex = 1;
                         InformationDialogWindow InfoWindow = new InformationDialogWindow("Error", "WebView2 Runtime Unavailable", "Microsoft Edge WebView2 Runtime is not installed on your device.", "\ue7f9", "Download", "Cancel")
                         {
                             Topmost = true
                         };
                         if (InfoWindow.ShowDialog() == true)
                             BrowserView.Tab.ParentWindow.NewTab("https://developer.microsoft.com/en-us/microsoft-edge/webview2/consumer/", true, BrowserView.Tab.ParentWindow.TabsUI.SelectedIndex + 1);
+                        return;
                     }
                 }
-                App.Instance.GlobalSave.Set("WebEngine", WebEngineComboBox.SelectedIndex);
+                App.Instance.GlobalSave.Set("WebEngine", (int)(WebEngineComboBox.SelectedIndex == 1 ? WebEngineType.Trident : WebEngineType.ChromiumEdge));
             }
         }
         private void TridentVersionComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -950,16 +858,7 @@ namespace SLBr.Pages
                 bool Enabled = SpellCheckCheckBox.IsChecked.GetValueOrDefault();
                 WebViewManager.RuntimeSettings.SpellCheck = Enabled;
                 App.Instance.GlobalSave.Set("SpellCheck", Enabled.ToString());
-                if (WebViewManager.IsCefInitialized)
-                {
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("spellcheck.dictionaries", App.Instance.Languages.Select(i => i.Tooltip), out _);
-                        GlobalRequestContext.SetPreference("intl.accept_languages", App.Instance.Languages.Select(i => i.Tooltip), out _);
-                        GlobalRequestContext.SetPreference("browser.enable_spellchecking", Enabled, out _);
-                    });
-                }
+                // CEF removed
             }
         }
         private void SearchSuggestionsCheckBox_Click(object sender, RoutedEventArgs e)
@@ -1237,15 +1136,8 @@ namespace SLBr.Pages
             if (SettingsInitialized)
             {
                 ExtensionRefreshButton.IsEnabled = false;
-                switch (BrowserView.WebView.Engine)
-                {
-                    case WebEngineType.Chromium:
-                        await App.Instance.ExtensionManager.LoadCEFExtensions();
-                        break;
-                    case WebEngineType.ChromiumEdge:
-                        await App.Instance.ExtensionManager.LoadWebView2Extensions();
-                        break;
-                }
+                await App.Instance.ExtensionManager.LoadWebView2Extensions();
+
                 ExtensionRefreshButton.IsEnabled = true;
             }
         }
@@ -1281,116 +1173,53 @@ namespace SLBr.Pages
         }
 
         private void StandardFontComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+
         {
-            if (SettingsInitialized)
-            {
-                if (WebViewManager.IsCefInitialized)
-                {
-                    string Value = StandardFontComboBox.SelectedItem.ToString();
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("webkit.webprefs.fonts.standard.Zyyy", Value, out string _);
-                    });
-                }
-            }
+
         }
+
+
 
         private void SerifFontComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+
         {
-            if (SettingsInitialized)
-            {
-                if (WebViewManager.IsCefInitialized)
-                {
-                    string Value = SerifFontComboBox.SelectedItem.ToString();
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("webkit.webprefs.fonts.serif.Zyyy", Value, out string _);
-                    });
-                }
-            }
+
         }
+
+
 
         private void SansSerifFontComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+
         {
-            if (SettingsInitialized)
-            {
-                if (WebViewManager.IsCefInitialized)
-                {
-                    string Value = SansSerifFontComboBox.SelectedItem.ToString();
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("webkit.webprefs.fonts.sansserif.Zyyy", Value, out string _);
-                    });
-                }
-            }
+
         }
+
+
 
         private void FixedFontComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+
         {
-            if (SettingsInitialized)
-            {
-                if (WebViewManager.IsCefInitialized)
-                {
-                    string Value = FixedFontComboBox.SelectedItem.ToString();
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("webkit.webprefs.fonts.fixed.Zyyy", Value, out string _);
-                    });
-                }
-            }
+
         }
+
+
 
         private void MathFontComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+
         {
-            if (SettingsInitialized)
-            {
-                if (WebViewManager.IsCefInitialized)
-                {
-                    string Value = MathFontComboBox.SelectedItem.ToString();
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("webkit.webprefs.fonts.math.Zyyy", Value, out string _);
-                    });
-                }
-            }
+
         }
 
-        private void FontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (SettingsInitialized)
-            {
-                if (WebViewManager.IsCefInitialized)
-                {
-                    int Value = (int)FontSizeSlider.Value;
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("webkit.webprefs.default_font_size", Value, out string _);
-                    });
-                }
-            }
-        }
 
-        private void MinimumFontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (SettingsInitialized)
-            {
-                if (WebViewManager.IsCefInitialized)
-                {
-                    int Value = (int)MinimumFontSizeSlider.Value;
-                    Cef.UIThreadTaskFactory.StartNew(delegate
-                    {
-                        var GlobalRequestContext = Cef.GetGlobalRequestContext();
-                        GlobalRequestContext.SetPreference("webkit.webprefs.minimum_font_size", Value, out string _);
-                    });
-                }
-            }
-        }
+
+        private void FontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+        }
+
+        private void MinimumFontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+        }
+
         private void ExternalFontsCheckBox_Click(object sender, RoutedEventArgs e)
         {
             if (SettingsInitialized)

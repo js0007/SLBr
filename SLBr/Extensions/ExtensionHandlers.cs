@@ -1,9 +1,6 @@
-﻿/*Copyright © SLT Softwares. All rights reserved.
+/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
-using CefSharp.Callback;
-using CefSharp.Wpf.HwndHost;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using SLBr.Pages;
@@ -149,14 +146,14 @@ namespace SLBr.Extensions
 
     public class ExtensionManager
     {
-        private ObservableCollection<Extension> CEFExtensions = [];
+
         private ObservableCollection<Extension> WebView2Extensions = [];
 
         public ObservableCollection<Extension>? GetExtensions(WebEngineType Engine)
         {
             return Engine switch
             {
-                WebEngineType.Chromium => CEFExtensions,
+
                 WebEngineType.ChromiumEdge => WebView2Extensions,
                 _ => null,
             };
@@ -166,133 +163,13 @@ namespace SLBr.Extensions
 
         public ExtensionManager()
         {
-            CEFExtensions.CollectionChanged += OnExtensionsCollectionChanged;
+
             WebView2Extensions.CollectionChanged += OnExtensionsCollectionChanged;
         }
 
         private void OnExtensionsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             Changed?.Invoke(this, e);
-        }
-
-        class CefExtensionPreferenceObserver : IPreferenceObserver
-        {
-            private static Timer DebounceTimer;
-
-            public void Dispose()
-            {
-                DebounceTimer?.Dispose();
-            }
-
-            public void OnPreferenceChanged(string name)
-            {
-                DebounceTimer ??= new Timer(DebounceCallback, null, Timeout.Infinite, Timeout.Infinite);
-                DebounceTimer.Change(300, Timeout.Infinite);
-            }
-
-            private void DebounceCallback(object _)
-            {
-                Application.Current.Dispatcher.BeginInvoke(async () =>
-                {
-                    await App.Instance.ExtensionManager.LoadCEFExtensions();
-                });
-            }
-        }
-
-        CefExtensionPreferenceObserver _CefExtensionPreferenceObserver;
-        IRegistration _CefPreferenceRegistration;
-
-        public async Task LoadCEFExtensions()
-        {
-            if (string.IsNullOrEmpty(WebViewManager.CEFExtensionsPath))
-                return;
-            List<Extension> Results = await Cef.UIThreadTaskFactory.StartNew(() =>
-            {
-                List<Extension> List = [];
-                IRequestContext GlobalRequestContext = Cef.GetGlobalRequestContext();
-                if (_CefExtensionPreferenceObserver == null)
-                {
-                    _CefExtensionPreferenceObserver = new CefExtensionPreferenceObserver();
-                    _CefPreferenceRegistration = GlobalRequestContext.AddPreferenceObserver("extensions.settings", _CefExtensionPreferenceObserver);
-                    //WARNING: Do not remove _CefPreferenceRegistration. A reference to IRegistration must be keep alive to prevent .NET GC from destroying the observer adapter.
-                }
-                if (GlobalRequestContext.HasPreference("extensions.settings"))
-                {
-                    object Settings = GlobalRequestContext.GetPreference("extensions.settings");
-                    if (Settings is IDictionary<string, object> SettingsData)
-                    {
-                        foreach (KeyValuePair<string, object> KeyValue in SettingsData)
-                        {
-                            if (KeyValue.Value is not IDictionary<string, object> ExtensionData)
-                                continue;
-                            if (ExtensionData.TryGetValue("creation_flags", out var CreationProperty) && CreationProperty is int Creation && Creation == 1)
-                                continue;
-                            if (ExtensionData.TryGetValue("path", out var ExtensionPathProperty) && ExtensionPathProperty is string ExtensionPath)
-                            {
-                                string? AlternateID = null;
-                                if (!Path.Exists(ExtensionPath))
-                                {
-                                    string ProfilePath = Path.Combine(WebViewManager.CEFExtensionsPath, ExtensionPath);
-                                    if (!Path.Exists(ProfilePath))
-                                        continue;
-                                    ExtensionPath = ProfilePath;
-                                    if (!File.Exists(Path.Combine(ProfilePath, "manifest.json")))
-                                        ExtensionPath = Directory.GetDirectories(ProfilePath).FirstOrDefault(i => File.Exists(Path.Combine(i, "manifest.json"))) ?? ProfilePath;
-                                }
-                                else
-                                {
-                                    string FolderName = Path.GetFileName(ExtensionPath);
-                                    if (FolderName != KeyValue.Key)
-                                        AlternateID = FolderName;
-                                }
-                                bool IsEnabled = true;
-                                if (ExtensionData.TryGetValue("disable_reasons", out var DisableReasonsProperty) && DisableReasonsProperty is IEnumerable<object> DisableReasons && DisableReasons.Any())
-                                //{
-                                    IsEnabled = false;
-                                    //Debug.WriteLine(string.Join(", ", DisableReasons));
-                                //}
-                                Extension _Extension = new()
-                                {
-                                    Configurable = false,
-                                    EngineType = WebEngineType.Chromium,
-                                    ID = KeyValue.Key,
-                                    IsEnabled = IsEnabled,
-                                    LocalPath = ExtensionPath,
-                                    AlternateID = AlternateID
-                                };
-                                if (ExtensionData.TryGetValue("manifest", out var ManifestProperty) && ManifestProperty is IDictionary<string, object> ManifestData)
-                                {
-                                    if (ManifestData.TryGetValue("name", out var NameProperty))
-                                        _Extension.Name = NameProperty?.ToString();
-                                    if (ManifestData.TryGetValue("description", out var DescriptionProperty))
-                                        _Extension.Description = DescriptionProperty?.ToString();
-                                    if (ManifestData.TryGetValue("version", out var VersionProperty))
-                                        _Extension.Version = VersionProperty?.ToString();
-                                    if (ManifestData.TryGetValue("action", out var ActionProperty) && ActionProperty is IDictionary<string, object> ActionData)
-                                    {
-                                        if (ActionData.TryGetValue("default_popup", out var PopupProperty))
-                                            _Extension.ActionPopup = $"chrome-extension://{_Extension.ID}/{PopupProperty?.ToString()}";
-                                        if (ActionData.TryGetValue("default_icon", out var IconProperty))
-                                        {
-                                            if (IconProperty is IDictionary<string, object> IconData)
-                                                _Extension.ActionIcon = Path.Combine(_Extension.LocalPath, PickBestIcon(IconData));
-                                            else
-                                                _Extension.ActionIcon = Path.Combine(_Extension.LocalPath, IconProperty?.ToString());
-                                        }
-                                    }
-                                }
-                                else
-                                    SetManifest(_Extension, Path.Combine(_Extension.LocalPath, "manifest.json"));
-                                List.Add(_Extension);
-                            }
-                        }
-                    }
-                }
-                return List;
-            });
-            CEFExtensions.Clear();
-            foreach (Extension _Extension in Results)
-                CEFExtensions.Add(_Extension);
         }
 
         private static string PickBestIcon(IDictionary<string, object> IconData)
@@ -497,13 +374,6 @@ namespace SLBr.Extensions
                     WebView2Extensions.Remove(_Extension);
                     return true;
                 }
-                else if (_Extension.EngineType == WebEngineType.Chromium)
-                {
-                    if (Directory.Exists(_Extension.LocalPath))
-                        Directory.Delete(_Extension.LocalPath, true);
-                    CEFExtensions.Remove(_Extension);
-                    return true;
-                }
             }
             catch { }
             return false;
@@ -513,7 +383,7 @@ namespace SLBr.Extensions
         {
             string? ExtensionsPath = Engine switch
             {
-                WebEngineType.Chromium => WebViewManager.CEFUnpackedExtensionsPath,
+
                 _ => WebViewManager.WebView2UnpackedExtensionsPath,
             };
 
@@ -709,7 +579,7 @@ namespace SLBr.Extensions
 
         #region Popup
         Window? PopupWindow;
-        ChromiumWebBrowser? CEFPopupBrowser;
+
         WebView2? WebView2PopupBrowser;
         DispatcherTimer PopupDismissTimer = null;
 
@@ -756,16 +626,8 @@ namespace SLBr.Extensions
                 PopupWindow.Top = TargetTop / DPIY;
             };
 
-            if (Target.WebView.Engine == WebEngineType.Chromium)
-            {
-                CEFPopupBrowser = await BuildCEF(_Extension, Target);
-                PopupWindow.Content = CEFPopupBrowser;
-            }
-            else
-            {
-                WebView2PopupBrowser = await BuildWebView2(_Extension, Target);
-                PopupWindow.Content = WebView2PopupBrowser;
-            }
+            WebView2PopupBrowser = await BuildWebView2(_Extension, Target);
+            PopupWindow.Content = WebView2PopupBrowser;
 
             PopupWindow.Show();
             PopupWindow.Activate();
@@ -828,24 +690,6 @@ namespace SLBr.Extensions
             PopupDismissTimer?.Stop();
         }
 
-        private void CEF_JavascriptMessageReceived(object? sender, JavascriptMessageReceivedEventArgs e)
-        {
-            if (CEFPopupBrowser == null)
-                return;
-            Application.Current.Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    dynamic Data = e.Message;
-                    if (Data == null || CEFPopupBrowser == null)
-                        return;
-                    CEFPopupBrowser.Height = Data.height;
-                    CEFPopupBrowser.Width = Data.width;
-                }
-                catch { }
-            });
-        }
-
         public void CloseAction()
         {
             if (PopupWindow == null)
@@ -853,8 +697,8 @@ namespace SLBr.Extensions
 
             PopupWindow.Content = null;
 
-            CEFPopupBrowser?.Dispose();
-            CEFPopupBrowser = null;
+
+
             WebView2PopupBrowser?.Dispose();
             WebView2PopupBrowser = null;
 
@@ -868,42 +712,6 @@ namespace SLBr.Extensions
         //https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/ui/views/extensions/extension_popup.h?q=kMaxSize%20%3D%20%7B800,%20600%7D
 
         //WARNING: Avoid IWebView usage.
-        private async Task<ChromiumWebBrowser> BuildCEF(Extension _Extension, Browser _Browser)
-        {
-            if (!WebViewManager.IsCefInitialized)
-                await WebViewManager.InitializeCEF();
-            ChromiumWebBrowser View = new("about:blank")
-            {
-                SnapsToDevicePixels = true,
-                AllowDrop = true,
-                IsManipulationEnabled = true,
-                MinWidth = 25,
-                MinHeight = 25,
-                MaxWidth = 800,
-                MaxHeight = 600,
-            };
-
-            View.JavascriptObjectRepository.Settings.JavascriptBindingApiGlobalObjectName = "engine";
-            View.JavascriptObjectRepository.Settings.LegacyBindingEnabled = false;
-            View.JavascriptObjectRepository.Register("slbrExtensionContext", new CefExtensionContextProvider(_Browser.WebView), BindingOptions.DefaultBinder);
-
-            View.IsBrowserInitializedChanged += async (_, _) =>
-            {
-                if (View.IsBrowserInitialized)
-                {
-                    await View.GetDevToolsClient().Page.AddScriptToEvaluateOnNewDocumentAsync(Scripts.ExtensionPolyfillScript, null, null, true);
-                    await View.GetDevToolsClient().Page.EnableAsync();
-                    View.Load(_Extension.ActionPopup);
-                }
-            };
-            View.LoadingStateChanged += (_, _) =>
-            {
-                View.ExecuteScriptAsync(Scripts.ExtensionPopupScript);
-            };
-            View.JavascriptMessageReceived += CEF_JavascriptMessageReceived;
-            return View;
-        }
-
         private async Task<WebView2> BuildWebView2(Extension _Extension, Browser _Browser)
         {
             if (!WebViewManager.IsWebView2Initialized)

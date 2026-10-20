@@ -1,8 +1,8 @@
-﻿/*Copyright © SLT Softwares. All rights reserved.
+/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
-using CefSharp.Wpf.HwndHost;
+using Microsoft.Web.WebView2.Core;
+
 using Microsoft.Win32;
 using SLBr.Controls;
 using SLBr.WebView;
@@ -447,7 +447,7 @@ namespace SLBr
         }
 
         public static string BuildChromeBrand() =>
-            $"Chrome/{Cef.ChromiumVersion.Split('.')[0]}.0.0.0";
+            $"Chrome/{Utils.GetChromiumVersion().Split('.')[0]}.0.0.0";
 
         public static string BuildUserAgentFromProduct(string Product, PlatformID? Platform = null) =>
             BuildUserAgentFromOSAndProduct(GetUnifiedPlatform(Platform ?? Environment.OSVersion.Platform), $"{Product}{(Platform == PlatformID.Unix ? " Mobile" : "")}");
@@ -538,24 +538,6 @@ namespace SLBr
             return string.Concat(Self.AsSpan(0, MaxLength - (AddEllipsis ? 3 : 0)), AddEllipsis ? "..." : string.Empty);
         }
 
-        public static void AddNoErrorFlag(this CefSettings Settings, string Key, string Value)
-        {
-            try { Settings.CefCommandLineArgs.Add(Key, Value); }
-            catch {
-                try
-                {
-                    string Comma = Value[0] == ',' ? "" : ",";
-                    Settings.CefCommandLineArgs[Key] += $"{Comma}{Value}";
-                }
-                catch { }
-            }
-        }
-
-        public static void AddNoErrorFlag(this CefSettings Settings, string Value)
-        {
-            try { Settings.CefCommandLineArgs.Add(Value); } catch { }
-        }
-
         public static string ToTitleCase(this string Input)
         {
             if (string.IsNullOrEmpty(Input))
@@ -585,8 +567,61 @@ namespace SLBr
         }
     }
 
+    public static class ResourceHandler
+    {
+        public static byte[] GetByteArray(string text, Encoding encoding) => encoding.GetBytes(text);
+    }
+
     public static partial class Utils
     {
+        public static string GetChromiumVersion()
+        {
+            try
+            {
+                string version = CoreWebView2Environment.GetAvailableBrowserVersionString();
+                if (!string.IsNullOrEmpty(version))
+                {
+                    int spaceIdx = version.IndexOf(' ');
+                    return spaceIdx > 0 ? version[..spaceIdx] : version;
+                }
+            }
+            catch { }
+            return "134.0.0.0";
+        }
+
+        public static string GetMimeType(string extension)
+        {
+            if (string.IsNullOrEmpty(extension))
+                return "application/octet-stream";
+            if (!extension.StartsWith('.'))
+                extension = "." + extension;
+            try
+            {
+                using var key = Registry.ClassesRoot.OpenSubKey(extension);
+                var value = key?.GetValue("Content Type") as string;
+                if (!string.IsNullOrEmpty(value))
+                    return value;
+            }
+            catch { }
+            return extension.ToLowerInvariant() switch
+            {
+                ".htm" or ".html" => "text/html",
+                ".txt" => "text/plain",
+                ".css" => "text/css",
+                ".js" => "text/javascript",
+                ".json" => "application/json",
+                ".xml" => "application/xml",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".gif" => "image/gif",
+                ".svg" => "image/svg+xml",
+                ".webp" => "image/webp",
+                ".pdf" => "application/pdf",
+                ".zip" => "application/zip",
+                _ => "application/octet-stream"
+            };
+        }
+
         private static bool? _IsSnapLayoutEnabled;
         public static bool IsSnapLayoutEnabled
         {
@@ -1092,38 +1127,12 @@ namespace SLBr
 
         //NOTE: Remove WinRT & Windows.SDK.NET usage.
         //TODO: No internet explorer support.
-        public async static void Share(IWebView View, string Title, string Url)
-        {
-            View.Control?.Focus();
-            if (View is ChromiumWebView ChromiumView)
-            {
-                object? ShareResult = await View.EvaluateScriptAsync($"(async()=>{{try {{await navigator.share({{title:'{Title}',url:'{Url}'}});return 1;}} catch (e) {{return 0;}}}})();");
-                if (ShareResult?.ToString() == "1")
-                    return;
-                IBrowserHost Host = ChromiumView.Browser.GetBrowser().GetHost();
-                View.ExecuteScript($@"(()=>{{
-const shareHandler = (e) => {{
-    if (e.keyCode === 0x79) {{
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        navigator.share({{title:'{Title}',url:'{Url}'}});
-        window.removeEventListener('keydown',shareHandler,true);
-    }}
-}};
-window.addEventListener('keydown',shareHandler,true);
-}})();");
-                Host.SendKeyEvent(new() { WindowsKeyCode = 0x79, Type = KeyEventType.KeyDown });
-                Host.SendKeyEvent(new() { WindowsKeyCode = 0x79, Type = KeyEventType.KeyUp });
-            }
-            //TODO: Resolve WebView2 NotAllowedError: Failed to execute 'share' on 'Navigator': Must be handling a user gesture to perform a share request.
-            //TODO: navigator.share causes backwards navigation on custom schemes within WebView2.
-            else
-                View.ExecuteScript($"navigator.share({{title:'{Title}',url:'{Url}'}});");
-        }
-
-        //public static bool IsAdministrator() =>
-        //    new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
-
+        public static void Share(IWebView View, string Title, string Url)
+        {
+            View.Control?.Focus();
+            View.ExecuteScript($"navigator.share({{title:'{Title}',url:'{Url}'}});");
+        }
+
         public static (string, string) ParseCertificateIssue(string Certificate)
         {
             ReadOnlySpan<char> Span = Certificate.AsSpan().Trim();

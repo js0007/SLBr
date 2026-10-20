@@ -1,7 +1,6 @@
-﻿/*Copyright © SLT Softwares. All rights reserved.
+/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
 using Microsoft.Web.WebView2.Core;
 
 namespace SLBr.WebView
@@ -26,49 +25,6 @@ namespace SLBr.WebView
         Low = -1,
         Medium = 0,
         High = 1
-    }
-
-    public class ChromiumCookieManager(ICookieManager _Core) : IWebCookieManager
-    {
-        ICookieManager Core = _Core;
-
-        public async Task<List<string>> GetAllSites()
-        {
-            List<Cookie> CoreCookiesList = await Core.VisitAllCookiesAsync();
-            HashSet<string> Sites = [];
-            foreach (Cookie CoreCookie in CoreCookiesList)
-                Sites.Add(CoreCookie.Domain);
-            return Sites.ToList();
-        }
-
-        public async Task<List<IWebCookie>> GetCookies(string Url)
-        {
-            List<Cookie> CoreCookiesList = await Core.VisitUrlCookiesAsync(Url, true);
-            List<IWebCookie> Cookies = [];
-            foreach (Cookie CoreCookie in CoreCookiesList)
-                Cookies.Add(new ChromiumWebCookie(CoreCookie));
-            return Cookies;
-        }
-
-        public async Task SetCookie(string Url, IWebCookie Cookie)
-        {
-            if (Cookie is ChromiumWebCookie ChromiumCookie)
-                await Core.SetCookieAsync(Url, ChromiumCookie.BaseCookie);
-        }
-
-        public async Task DeleteCookie(string Url, string Name)
-        {
-            await Core.DeleteCookiesAsync(Url, Name);
-        }
-
-        public async Task DeleteAll(string? Url = null)
-        {
-            await Core.DeleteCookiesAsync(Url);
-        }
-
-        public void Dispose()
-        {
-        }
     }
 
     public class ChromiumEdgeCookieManager(CoreWebView2CookieManager _Core) : IWebCookieManager
@@ -161,48 +117,6 @@ namespace SLBr.WebView
         DateTime Expires { get; set; }
         WebCookieSameSite SameSite { get; set; }
         //WebCookiePriority Priority { get; set; }
-    }
-
-    public class ChromiumWebCookie(Cookie _BaseCookie) : IWebCookie
-    {
-        public Cookie BaseCookie = _BaseCookie;
-        public string Name
-        {
-            get { return BaseCookie.Name; }
-        }
-        public string Value
-        {
-            get { return BaseCookie.Value; }
-            set { BaseCookie.Value = value; }
-        }
-        public string Domain
-        {
-            get { return BaseCookie.Domain; }
-        }
-        public string Path
-        {
-            get { return BaseCookie.Path; }
-        }
-        public bool Secure
-        {
-            get { return BaseCookie.Secure; }
-            set { BaseCookie.Secure = value; }
-        }
-        public bool HttpOnly
-        {
-            get { return BaseCookie.HttpOnly; }
-            set { BaseCookie.HttpOnly = value; }
-        }
-        public DateTime Expires
-        {
-            get { return BaseCookie.Expires ?? DateTime.MinValue; }
-            set { BaseCookie.Expires = value; }
-        }
-        public WebCookieSameSite SameSite
-        {
-            get { return BaseCookie.SameSite.ToWebCookieSameSite(); }
-            set { BaseCookie.SameSite = value.ToCefCookieSameSite(); }
-        }
     }
 
     public class ChromiumEdgeWebCookie(CoreWebView2Cookie _BaseCookie) : IWebCookie

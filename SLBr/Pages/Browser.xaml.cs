@@ -1,8 +1,6 @@
 ﻿/*Copyright © SLT Softwares. All rights reserved.
 Use of this source code is governed by a GNU license that can be found in the LICENSE file.*/
 
-using CefSharp;
-using CefSharp.Wpf.HwndHost;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using SLBr.Controls;
@@ -396,18 +394,7 @@ namespace SLBr.Pages
                         switch (V1)
                         {
                             case "0":
-                                if (WebView?.Engine == WebEngineType.Chromium)
-                                {
-                                    InformationDialogWindow InfoWindow = new("Information", "Already using Chromium web engine", "This tab is already running with the Chromium web engine. No changes are necessary.");
-                                    InfoWindow.ShowDialog();
-                                    break;
-                                }
-                                List<WebNavigationEntry> ChromiumHistory = await WebView?.GetNavigationHistoryAsync() ?? [new(true, Address)];
-                                //MessageBox.Show(JsonSerializer.Serialize(ChromiumHistory));
-                                DisposeBrowserCore();
-                                CreateWebView(ChromiumHistory, WebEngineType.Chromium);
-                                Tab.ParentWindow.OpenToast("Web engine switched", "\xec6c");
-                                break;
+                                goto case "1";
                             case "1":
                                 if (WebView?.Engine == WebEngineType.ChromiumEdge)
                                 {
@@ -486,9 +473,6 @@ namespace SLBr.Pages
             BrowserLoadChanged(Address, true, null);
             switch (Engine)
             {
-                case WebEngineType.Chromium:
-                    WebEngineButtonIcon.Text = "\x2600";
-                    break;
                 case WebEngineType.ChromiumEdge:
                     WebEngineButtonIcon.Text = "\x2601";
                     break;
@@ -599,7 +583,7 @@ namespace SLBr.Pages
                     LimitNetwork(0, Bandwidth, Bandwidth);
                 }
                 //TODO: Apply UA branding on Edge & Trident web views.
-                UserAgentBranding = !Private && WebView.Engine == WebEngineType.Chromium;
+                UserAgentBranding = !Private && WebView.Engine == WebEngineType.ChromiumEdge;
                 if (UserAgentBranding)
                 {
                     await WebView?.CallDevToolsAsync("Emulation.setUserAgentOverride", new
@@ -830,26 +814,6 @@ namespace SLBr.Pages
 
             if (e.Url.StartsWith("https://addons.mozilla.org/en-US/firefox/addon/"))
                 e.ModifiedHeaders["User-Agent"] = App.Instance.FirefoxUserAgent;
-            if (ProprietaryCodecsInfoBar == null && WebView.Engine == WebEngineType.Chromium && e.ResourceRequestType == ResourceRequestType.Media && Utils.IsProprietaryCodec(Utils.GetFileExtension(e.Url)))
-            {
-                if (bool.Parse(App.Instance.GlobalSave.Get("WarnCodec")))
-                {
-                    Dispatcher.BeginInvoke(() =>
-                    {
-                        ProprietaryCodecsInfoBar = new()
-                        {
-                            Icon = "\xea69",
-                            Title = "Proprietary Codecs Detected",
-                            Description = [new() { Text = "This site is trying to play media using formats not supported by Chromium (CEF). Do you want to switch to the Edge (WebView2) engine?" }],
-                            Actions = [
-                                new() { Text = "Switch", Background = (SolidColorBrush)FindResource("IndicatorBrush"), Foreground = App.Instance.WhiteColor, Command = new RelayCommand(() => { CloseInfoBar(ProprietaryCodecsInfoBar); Action(Actions.SwitchWebEngine, "1"); }) },
-                                new() { Text = "Do not ask again", Command = new RelayCommand(async () => { CloseInfoBar(WaybackInfoBar); App.Instance.GlobalSave.Set("WarnCodec", false); }) }
-                            ]
-                        };
-                        LocalInfoBars.Add(ProprietaryCodecsInfoBar);
-                    });
-                }
-            }
         }
 
         private void WebView_ResourceLoaded(object? sender, ResourceLoadedResult e)
@@ -871,7 +835,7 @@ namespace SLBr.Pages
         {
             if (e.IsMainFrame)
             {
-                if (WebView.Engine == WebEngineType.Chromium && !WebViewManager.OverrideRequests.ContainsKey(e.Url))
+                if (!WebViewManager.OverrideRequests.ContainsKey(e.Url))
                 {
                     if (Utils.IsHttpScheme(e.Url))
                     {
@@ -1441,23 +1405,7 @@ namespace SLBr.Pages
                                     });
                                     WebView.ExecuteScript($"window.slbr.webstore.receive('{Task}', false);");
                                 }
-                                else if (WebView.Engine == WebEngineType.Chromium)
-                                {
-                                    _ = Dispatcher.BeginInvoke(() =>
-                                    {
-                                        ExtensionFailInfoBar = new()
-                                        {
-                                            Icon = "\xea86",
-                                            Title = "Extension Installation Failed",
-                                            Description = [new() { Text = "Installation of extensions at runtime is not supported by Chromium (CEF). Do you want to switch to the Edge (WebView2) engine?" }],
-                                            Actions = [
-                                                new() { Text = "Switch", Background = (SolidColorBrush)FindResource("IndicatorBrush"), Foreground = App.Instance.WhiteColor, Command = new RelayCommand(() => { CloseInfoBar(ProprietaryCodecsInfoBar); Action(Actions.SwitchWebEngine, "1"); }) },
-                                            ]
-                                        };
-                                        LocalInfoBars.Add(ExtensionFailInfoBar);
-                                    });
-                                    WebView.ExecuteScript($"window.slbr.webstore.receive('{Task}', false);");
-                                }
+
                                 else
                                 {
                                     bool Result = false;
@@ -1476,7 +1424,7 @@ namespace SLBr.Pages
                                         if (Document.RootElement.GetProperty("url").GetString() is string RawDownloadUrl)
                                             DownloadUrl = RawDownloadUrl;
                                         else
-                                            DownloadUrl = $"https://edge.microsoft.com/extensionwebstorebase/v1/crx?response=redirect&os=win&arch=x64&prod=chromiumcrx&prodchannel=canary&prodversion={Cef.ChromiumVersion}&lang=en-US&acceptformat=crx3,puff&x=id%3D{Document.RootElement.GetProperty("id").GetString()}%26installsource%3Dondemand%26uc";
+                                            DownloadUrl = $"https://edge.microsoft.com/extensionwebstorebase/v1/crx?response=redirect&os=win&arch=x64&prod=chromiumcrx&prodchannel=canary&prodversion={Utils.GetChromiumVersion()}&lang=en-US&acceptformat=crx3,puff&x=id%3D{Document.RootElement.GetProperty("id").GetString()}%26installsource%3Dondemand%26uc";
                                         if (!string.IsNullOrEmpty(DownloadUrl))
                                         {
                                             HttpRequestMessage Request = new(HttpMethod.Get, DownloadUrl);
@@ -1788,24 +1736,7 @@ namespace SLBr.Pages
             if (e.IsEditable)
             {
                 //TODO: Utilize engine spell checker.
-                //Dysfunctional spell check.
-                /*if (e.SpellCheck && e.DictionarySuggestions.Count != 0)
-                {
-                    foreach (string Suggestion in e.DictionarySuggestions)
-                    {
-                        BrowserMenu.Items.Add(new MenuItem { Icon = "\uf87b", Header = Suggestion, Command = new RelayCommand(_ =>
-                        {
-                            if (WebView is ChromiumWebView ChromiumWebView)
-                                ((ChromiumWebBrowser)ChromiumWebView.Control).GetBrowserHost().ReplaceMisspelling(Suggestion);
-                        })});
-                    }
-                    BrowserMenu.Items.Add(new MenuItem { Icon = "\ue82e", Header = "Add to dictionary", Command = new RelayCommand(_ =>
-                    {
-                        if (WebView is ChromiumWebView ChromiumWebView)
-                            ((ChromiumWebBrowser)ChromiumWebView.Control).GetBrowserHost().AddWordToDictionary(e.MisspelledWord);
-                    }) });
-                    BrowserMenu.Items.Add(new Separator());
-                }*/
+
                 if (WebViewManager.RuntimeSettings.SpellCheck && !string.IsNullOrEmpty(e.SelectionText) && !e.SelectionText.Contains(' '))
                 {
                     SpellCheckTokenCancellationTokenSource = new();
@@ -1837,9 +1768,7 @@ namespace SLBr.Pages
                                             Header = Suggestion,
                                             Command = new RelayCommand(_ =>
                                             {
-                                                if (WebView is ChromiumWebView ChromiumWebView)
-                                                    ((ChromiumWebBrowser)ChromiumWebView.Control).GetBrowserHost().ReplaceMisspelling(Suggestion);
-                                                else if (WebView is ChromiumEdgeWebView EdgeWebView)
+                                                if (WebView is ChromiumEdgeWebView EdgeWebView)
                                                     EdgeWebView.ExecuteScript(Scripts.WebView2ReplaceMisspelling.Replace("{0}", Suggestion));
                                             })
                                         };
@@ -2037,8 +1966,7 @@ namespace SLBr.Pages
                         });
                     }
                 }
-                else if (WebView?.Engine == WebEngineType.Chromium)
-                    SetDarkMode(App.Instance.CurrentTheme.DarkWebPage);
+
             }
         }
 
@@ -2242,34 +2170,7 @@ namespace SLBr.Pages
                                     SetSiteInfo = "Secure";
                                     if (StatusCode == 418)
                                         SetSiteInfo = "Teapot";
-                                    if (WebView is ChromiumWebView ChromiumView)
-                                    {
-                                        NavigationEntry _NavigationEntry = await ((ChromiumWebBrowser)ChromiumView.Control).GetVisibleNavigationEntryAsync();
-                                        if (_NavigationEntry != null)
-                                        {
-                                            /*if (_NavigationEntry.HttpStatusCode == 0)
-                                            {
-                                                WebView?.Stop();
-                                                WebView?.Navigate(WebView?.Address);
-                                                return;
-                                            }*/
 
-                                            CertificateValidation.Text = _NavigationEntry.SslStatus.IsSecureConnection ? "Certificate is valid" : "Certificate is invalid";
-                                            SslStatus _SSL = _NavigationEntry.SslStatus;
-                                            if (_SSL.X509Certificate != null)
-                                            {
-                                                CertificateInfo.Visibility = Visibility.Visible;
-                                                var IssuedTo = Utils.ParseCertificateIssue(_SSL.X509Certificate.Subject);
-                                                IssueToCommonName.Text = IssuedTo.Item1;
-                                                IssueToCompany.Text = IssuedTo.Item2;
-                                                var IssuedBy = Utils.ParseCertificateIssue(_SSL.X509Certificate.Issuer);
-                                                IssueByCommonName.Text = IssuedBy.Item1;
-                                                IssueByCompany.Text = IssuedBy.Item2;
-                                                CertificateStart.Text = _SSL.X509Certificate.NotBefore.Date.ToShortDateString();
-                                                CertificateEnd.Text = _SSL.X509Certificate.NotAfter.Date.ToShortDateString();
-                                            }
-                                        }
-                                    }
                                 }
                                 else
                                     SetSiteInfo = "Insecure";
@@ -2404,16 +2305,7 @@ namespace SLBr.Pages
                             _BitmapImage.SafeFreeze();
                         }
                         SetDarkMode(App.Instance.CurrentTheme.DarkWebPage);
-                        //WARNING: Prevents undesirable behaviour in CefSharp subsequent to capture.
-                        if (WebView is ChromiumWebView ChromiumView)
-                        {
-                            ChromiumView.Browser.Height = CoreContainerSizeEmulator.ActualHeight + 1;
-                            await Dispatcher.InvokeAsync(() =>
-                            {
-                                ChromiumView.Browser.ClearValue(HeightProperty);
-                                //ChromiumView.Browser.GetBrowser()?.GetHost()?.WasResized();
-                            }, DispatcherPriority.Render);
-                        }
+
                     }
                 }
                 else if (SiteInformationText.Text != "Loading")
@@ -2703,7 +2595,6 @@ namespace SLBr.Pages
         }
 
         bool IsUtilityContainerOpen;
-        IWindowInfo SideBarWindowInfo;
         public HwndHoster DevToolsHost;
         public IntPtr WebView2DevToolsHWND = IntPtr.Zero;
         public void ToggleSideBar(bool ForceClose = false)
@@ -2731,13 +2622,9 @@ namespace SLBr.Pages
                     }
                     if (DevToolsHost != null)
                     {
-                        if (WebView is ChromiumWebView ChromiumView)
-                            ((ChromiumWebBrowser)ChromiumView.Control)?.BrowserCore.CloseDevTools();
                         DevToolsHost.Dispose();
                         DevToolsHost = null;
                     }
-                    SideBarWindowInfo?.Dispose();
-                    SideBarWindowInfo = null;
                     IsUtilityContainerOpen = false;
                 }
             }
@@ -2787,13 +2674,7 @@ namespace SLBr.Pages
                 {
                     if (DevToolsHost != null)
                     {
-                        if (WebView is ChromiumWebView ChromiumView)
-                        {
-                            SideBarWindowInfo = WindowInfo.Create();
-                            SideBarWindowInfo.SetAsChild(DevToolsHost.Handle);
-                            ((ChromiumWebBrowser)ChromiumView.Control)?.BrowserCore?.ShowDevTools(SideBarWindowInfo, XCoord, YCoord);
-                        }
-                        else if (WebView is ChromiumEdgeWebView EdgeWebView)
+                        if (WebView is ChromiumEdgeWebView EdgeWebView)
                         {
                             Dispatcher.BeginInvoke(async () =>
                             {
@@ -3980,7 +3861,7 @@ namespace SLBr.Pages
             _NewsFeed?.ApplyTheme(_Theme);
 
             if (App.Instance.ShowExtensionButton == 0)
-                ExtensionsButton.Visibility = App.Instance.ExtensionManager.GetExtensions(WebView?.Engine ?? (WebEngineType)App.Instance.GlobalSave.GetInt("WebEngine")).Count != 0 ? Visibility.Visible : Visibility.Collapsed;
+                ExtensionsButton.Visibility = App.Instance.ExtensionManager.GetExtensions(WebView?.Engine ?? (WebEngineType)App.Instance.GlobalSave.GetInt("WebEngine"))?.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             else if (App.Instance.ShowExtensionButton == 1)
                 ExtensionsButton.Visibility = Visibility.Visible;
             else
